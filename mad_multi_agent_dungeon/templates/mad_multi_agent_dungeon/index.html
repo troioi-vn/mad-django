@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Multi-Agent Dungeon</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        h1 { border-bottom: 1px solid #ccc; padding-bottom: 0.5em; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+        .status-running { color: green; }
+        .status-stopped { color: red; }
+        button { cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Agents</h1>
+    <table id="agent-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Phase</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for agent in agents %}
+                <tr data-agent-name="{{ agent.name }}">
+                    <td><a href="{% url 'agent_detail' agent.name %}">{{ agent.name }}</a></td>
+                    <td class="status">{{ agent.is_running|yesno:"Running,Stopped" }}</td>
+                    <td class="phase">{{ agent.get_phase_display }}</td>
+                    <td class="actions">
+                        <button class="start-agent" {% if agent.is_running %}disabled{% endif %}>Start</button>
+                        <button class="stop-agent" {% if not agent.is_running %}disabled{% endif %}>Stop</button>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+
+        function updateAgentStatus(agentName) {
+            fetch(`/api/agent/${agentName}/`)
+                .then(response => response.json())
+                .then(data => {
+                    const agentRow = document.querySelector(`tr[data-agent-name="${agentName}"]`);
+                    if (agentRow) {
+                        const statusCell = agentRow.querySelector('.status');
+                        const phaseCell = agentRow.querySelector('.phase');
+                        const startButton = agentRow.querySelector('.start-agent');
+                        const stopButton = agentRow.querySelector('.stop-agent');
+
+                        statusCell.textContent = data.agent.is_running ? 'Running' : 'Stopped';
+                        statusCell.className = data.agent.is_running ? 'status status-running' : 'status status-stopped';
+                        phaseCell.textContent = data.agent.phase;
+                        startButton.disabled = data.agent.is_running;
+                        stopButton.disabled = !data.agent.is_running;
+                    }
+                });
+        }
+
+        document.getElementById('agent-table').addEventListener('click', function(event) {
+            const target = event.target;
+            const agentRow = target.closest('tr');
+            if (!agentRow) return;
+
+            const agentName = agentRow.dataset.agentName;
+            let url;
+
+            if (target.classList.contains('start-agent')) {
+                url = `/api/agent/${agentName}/start/`;
+            } else if (target.classList.contains('stop-agent')) {
+                url = `/api/agent/${agentName}/stop/`;
+            } else {
+                return;
+            }
+
+            fetch(url, { 
+                method: 'POST', 
+                headers: { 
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        updateAgentStatus(agentName);
+                    }
+                });
+        });
+
+        // Periodically update all agents
+        setInterval(() => {
+            const agentRows = document.querySelectorAll('#agent-table tbody tr');
+            agentRows.forEach(row => {
+                updateAgentStatus(row.dataset.agentName);
+            });
+        }, 5000);
+    </script>
+</body>
+</html>

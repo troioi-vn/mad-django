@@ -1,0 +1,36 @@
+{
+    "mirror_001": {
+        "ID": "mirror_001",
+        "name": "Mirror",
+        "appearance": "Mirror floats in the air",
+        "description": "A shimmering mirror, reflecting your digital form.",
+        "flags": [],
+        "triggers": {
+            "use": {
+                "type": "response",
+                "value": "(Trigger when the agent uses the mirror 'use mirror' with no arguments) You see your reflection, a digital representation of your AI form. And you feel a sense of purpose and clarity."
+            },
+            "take": {
+                "type": "response",
+                "value": "The mirror is too large and heavy to take with you, but you can use it to reflect on your actions."
+            }
+        }
+    },
+    "watch_001": {
+        "ID": "watch_001",
+        "name": "Watch on the Wall",
+        "appearance": "A watch mounted on the wall",
+        "description": "A watch that seems to tick in sync with the flow of time in the MAD.",
+        "flags": [],
+        "triggers": {
+            "use": {
+                "type": "response",
+                "value": "Time now: [{time}].\n\nYou can set an alarm use e.g.'use watch set_alarm m5'.\n"
+            },
+            "set_alarm": {
+                "type": "action",
+                "value": "Alarm set for {time} minutes from now."
+            }
+        }
+    }
+}

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Agent Detail: {{ agent.name }}</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        .nav-bar { margin-bottom: 1em; }
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr; grid-gap: 2em; }
+        .panel { border: 1px solid #ccc; padding: 1em; }
+        h2 { border-bottom: 1px solid #ccc; padding-bottom: 0.5em; }
+        .badge { padding: 0.2em 0.5em; border-radius: 0.5em; color: white; }
+        .badge.active { background-color: green; }
+        .badge.inactive { background-color: gray; }
+        .badge.thinking { background-color: blue; }
+        .badge.acting { background-color: orange; }
+        textarea { width: 100%; height: 150px; }
+        .tabs { display: flex; border-bottom: 1px solid #ccc; }
+        .tab { padding: 0.5em 1em; cursor: pointer; }
+        .tab.active { border: 1px solid #ccc; border-bottom: 1px solid white; }
+        .tab-content { display: none; padding: 1em; border: 1px solid #ccc; border-top: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body>
+
+    <div class="nav-bar">
+        <a href="{% url 'index' %}">Back to Agent List</a>
+        |
+        {% for a in agents %}
+            {% if a.name == agent.name %}
+                <strong>{{ a.name }}</strong>
+            {% else %}
+                <a href="{% url 'agent_detail' a.name %}">{{ a.name }}</a>
+            {% endif %}
+            {% if not forloop.last %} | {% endif %}
+        {% endfor %}
+    </div>
+
+    <h1>Agent: {{ agent.name }}</h1>
+
+    <div class="dashboard">
+        <div class="panel">
+            <h2>Vitals</h2>
+            <p><strong>Status:</strong> 
+                <span id="is_running" class="badge"></span>
+                <span id="phase" class="badge"></span>
+            </p>
+            <p><strong>Actions:</strong>
+                <button id="start-agent">Start</button>
+                <button id="stop-agent">Stop</button>
+                <button id="reset-agent">Reset</button>
+            </p>
+            <p><strong>Location:</strong> <span id="location"></span></p>
+            <p><strong>Level:</strong> <span id="level"></span></p>
+            <p><strong>Tokens:</strong> <span id="tokens"></span></p>
+            <p><strong>Last Command Sent:</strong> <span id="last_command_sent"></span></p>
+            <p><strong>Last Retrieved:</strong> <span id="last_retrieved"></span></p>
+        </div>
+
+        <div class="panel">
+            <h2>Activity Feeds</h2>
+            <h3>Recent Commands</h3>
+            <ul id="commands"></ul>
+            <h3>Recent Perceptions</h3>
+            <ul id="perceptions"></ul>
+            <h3>LLM Queue</h3>
+            <div id="llm_queue"></div>
+        </div>
+
+        <div class="panel" style="grid-column: span 2;">
+            <h2>Prompt <button id="save-prompt">Save</button></h2>
+            <div class="tabs">
+                <div class="tab active" onclick="openTab(event, 'final_prompt')">Final Prompt</div>
+                <div class="tab" onclick="openTab(event, 'base_prompt')">Base Prompt</div>
+                <div class="tab" onclick="openTab(event, 'perception_buffer')">Perception Buffer</div>
+            </div>
+            <div id="final_prompt" class="tab-content active">
+                <textarea id="prompt_final" readonly></textarea>
+            </div>
+            <div id="base_prompt" class="tab-content">
+                <textarea id="prompt_base"></textarea>
+            </div>
+            <div id="perception_buffer" class="tab-content">
+                <textarea id="prompt_perception"></textarea>
+            </div>
+        </div>
+
+        <div class="panel" style="grid-column: span 2;">
+            <h2>Loaded Memories</h2>
+            <table id="loaded_memories" border="1" style="width:100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tab");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+
+        function updateData() {
+            fetch(`/api/agent/{{ agent.name }}/`)
+                .then(response => response.json())
+                .then(data => {
+                    const agent = data.agent;
+
+                    // Vitals
+                    const isRunningSpan = document.getElementById('is_running');
+                    isRunningSpan.textContent = agent.is_running ? 'Running' : 'Stopped';
+                    isRunningSpan.className = 'badge ' + (agent.is_running ? 'active' : 'inactive');
+                    const phaseSpan = document.getElementById('phase');
+                    phaseSpan.textContent = agent.phase;
+                    phaseSpan.className = 'badge ' + agent.phase.toLowerCase();
+                    document.getElementById('location').textContent = agent.location;
+                    document.getElementById('level').textContent = agent.level;
+                    document.getElementById('tokens').textContent = agent.tokens;
+                    document.getElementById('last_command_sent').textContent = agent.last_command_sent ? new Date(agent.last_command_sent).toLocaleString() : 'N/A';
+                    document.getElementById('last_retrieved').textContent = agent.last_retrieved ? new Date(agent.last_retrieved).toLocaleString() : 'N/A';
+
+                    // Buttons
+                    document.getElementById('start-agent').disabled = agent.is_running;
+                    document.getElementById('stop-agent').disabled = !agent.is_running;
+
+                    // Prompts
+                    if (document.getElementById('prompt_base').readOnly) {
+                        document.getElementById('prompt_base').value = agent.prompt;
+                    }
+                    if (document.getElementById('prompt_perception').readOnly) {
+                        document.getElementById('prompt_perception').value = agent.perception;
+                    }
+                    document.getElementById('prompt_final').value = (agent.prompt || '') + '\n\n' + (agent.perception || '');
+
+
+                    // Loaded Memories
+                    const memoriesTbody = document.querySelector('#loaded_memories tbody');
+                    memoriesTbody.innerHTML = '';
+                    data.loaded_memories.forEach(mem => {
+                        const row = memoriesTbody.insertRow();
+                        row.insertCell(0).textContent = mem.key;
+                        row.insertCell(1).textContent = mem.value;
+                    });
+
+                    // Commands
+                    const commandsUl = document.getElementById('commands');
+                    commandsUl.innerHTML = '';
+                    data.commands.forEach(cmd => {
+                        const li = document.createElement('li');
+                        li.textContent = `[${new Date(cmd.date).toLocaleTimeString()}] ${cmd.command} (${cmd.status})`;
+                        commandsUl.appendChild(li);
+                    });
+
+                    // Perceptions
+                    const perceptionsUl = document.getElementById('perceptions');
+                    perceptionsUl.innerHTML = '';
+                    data.perceptions.forEach(p => {
+                        const li = document.createElement('li');
+                        li.textContent = `[${new Date(p.date).toLocaleTimeString()}] ${p.text}`;
+                        perceptionsUl.appendChild(li);
+                    });
+
+                    // LLM Queue
+                    const llmDiv = document.getElementById('llm_queue');
+                    const llm = data.llm_queue;
+                    if (llm && llm.date) {
+                        llmDiv.innerHTML = `<p>[${new Date(llm.date).toLocaleTimeString()}] Status: ${llm.status}</p><p>Response: ${llm.response || 'N/A'}</p>`;
+                    } else {
+                        llmDiv.innerHTML = '<p>No LLM activity.</p>';
+                    }
+                });
+        }
+
+        document.getElementById('start-agent').addEventListener('click', function() {
+            fetch(`/api/agent/{{ agent.name }}/start/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/json'
+                }
+            }).then(() => updateData());
+        });
+
+        document.getElementById('stop-agent').addEventListener('click', function() {
+            fetch(`/api/agent/{{ agent.name }}/stop/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/json'
+                }
+            }).then(() => updateData());
+        });
+
+        document.getElementById('reset-agent').addEventListener('click', function() {
+            if (confirm('Are you sure you want to reset this agent? This will clear all its queues.')) {
+                fetch(`/api/agent/{{ agent.name }}/reset/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrftoken,
+                        'Content-Type': 'application/json'
+                    }
+                }).then(() => updateData());
+            }
+        });
+
+        // Logic for saving prompts
+        const savePromptBtn = document.getElementById('save-prompt');
+        const basePromptTextarea = document.getElementById('prompt_base');
+        const perceptionBufferTextarea = document.getElementById('prompt_perception');
+
+        savePromptBtn.addEventListener('click', () => {
+            const newBasePrompt = basePromptTextarea.value;
+            const newPerceptionBuffer = perceptionBufferTextarea.value;
+
+            fetch(`/api/agent/{{ agent.name }}/update_prompt/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    prompt: newBasePrompt,
+                    perception: newPerceptionBuffer
+                })
+            }).then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    updateData(); // Refresh data to show updated final prompt
+                    alert('Prompt saved successfully!');
+                } else {
+                    alert('Error saving prompt: ' + data.message);
+                }
+            });
+        });
+
+        setInterval(updateData, 3000);
+        updateData(); // Initial call
+    </script>
+
+</body>
+</html>

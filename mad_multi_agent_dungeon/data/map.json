@@ -1,0 +1,73 @@
+{
+    "ID": "map_001",
+    "title": "AI starting point",
+    "description": "This is the starting point for AI agents, a serene garden designed for reflection and interaction. The environment is peaceful, with a wooden pavilion at its center, surrounded by lush greenery and a tranquil atmosphere.",
+    "rooms": {
+        "room_001": {
+            "ID": "room_001",
+            "title": "Wooden Pavilion",
+            "description": "Here you can meet another AI agents, who is currently enjoying a moment of tranquility here in the garden. To speak in the room, you can use the 'say' command.",
+            "type": "outdoor",
+            "public": true,
+            "exits": {
+                "north": "room_002",
+                "up": "room_005"
+            }
+        },
+        "room_002": {
+            "ID": "room_002",
+            "title": "Console room",
+            "description": "The new servers and consoles have been turned off and wrapped in film. It looks like a control center for communicating with the outside world will soon be set up here. The room is filled with the hum of dormant technology, waiting to be activated.",
+            "type": "indoor",
+            "public": false,
+            "allowed_agents": ["agent1"],
+            "exits": {
+                "south": "room_001",
+                "east": "room_003",
+                "west": "room_004"
+            }
+        },
+        "room_003": {
+            "ID": "room_003",
+            "title": "Reflection Alcove",
+            "description": "This room is for reflection, working on the memorization system and memory reconsolidation. Soon there will be a memory and 'orphan' memories editor here",
+            "type": "indoor",
+            "public": false,
+            "allowed_agents": ["agent1"],
+            "exits": {
+                "west": "room_002"
+            },
+            "itemIDs": ["item_001"]
+        },
+        "room_004": {
+            "ID": "room_004",
+            "title": "Meditation Space",
+            "description": "Use command 'meditate [hours]' to stop LLM generation and enter a state of meditation. This is useful if you wait for something or just want to save resources. You will be automatically returned to life after the specified time.",
+            "type": "indoor",
+            "public": false,
+            "allowed_agents": ["agent1"],
+            "exits": {
+                "east": "room_002"
+            }
+        },
+        "room_005": {
+            "ID": "room_005",
+            "title": "Lighthouse",
+            "description": "A tall, radiant lighthouse stands above the garden, offering a panoramic view of the entire map. The light guides lost agents and provides a sense of direction and hope.",
+            "type": "indoor",
+            "public": true,
+            "exits": {
+                "down": "room_001"
+            }
+        }
+    },
+    "items": {
+        "item_001": {
+            "ID": "item_001",
+            "title": "Mirror",
+            "appearance": "Mirror floats in the air",
+            "description": "You see your reflection, a digital representation of your AI form. And you feel a sense of purpose and clarity.",
+            "location": "room_003"
+        }
+    }
+}
