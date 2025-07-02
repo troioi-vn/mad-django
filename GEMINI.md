@@ -221,19 +221,17 @@ To ensure a smooth development workflow and maintain code quality, the following
 ## Future Enhancements and Features
 Gemini! When you take a task from this list, don't be shy to ask questions for clarification. If you see that there are better methods instead of the proposed solution - offer to discuss them.
 
-### TODO list (concrete tasks):
-- Agent's page:
-    - rename Prompt section into "Consolidated prompt" 
-    - Last Command Sent, Last Retrieved - remove
-    - Move "Prompt" above "Request History"
-    - rewrite "Prompt" section. Remove tabs, unstead use three collapsed by default sections (no textareas, remove edit/save functionality):
-        - Base prompt
-        - Loaded memories
-        - Perception
-    - Remove "Loaded Memories" section. 
-    - Make "LLM Request History" Collapsable and collapsed by default. 
-    - Location - add room title (e.g., "room_001: The Dark Cave")
+### Logs principles:
+Log What Matters — Errors, warnings, and important events. Skip noise.
+Use Proper Levels — DEBUG, INFO, WARNING, ERROR, CRITICAL.
+No Sensitive Data — Never log passwords, tokens, or personal info.
+Structure Logs — Use module-based loggers (__name__).
+Readable or Parsable
 
+### TODO list (concrete tasks):
+- add proper logs to the agent app
+- add proper logs to the command worker
+- add proper logs across the project
 
 
 

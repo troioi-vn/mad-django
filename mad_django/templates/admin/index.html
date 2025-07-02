@@ -1,18 +1,4 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
 {{ block.super }}
-<div class="module">
-    <table>
-        <caption>
-            <a class="section" title="Commands">Commands</a>
-        </caption>
-        <tbody>
-            <tr>
-                <th scope="row"><a href="{% url 'admin:send_command' %}">Send Command to Queue</a></th>
-                <td></td>
-                <td></td>
-            </tr>
-        </tbody>
-    </table>
-</div>
 {% endblock %}

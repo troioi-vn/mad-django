@@ -13,12 +13,30 @@
         .badge.inactive { background-color: gray; }
         .badge.thinking { background-color: blue; }
         .badge.acting { background-color: orange; }
-        textarea { width: 100%; height: 150px; }
+        textarea { width: 100%; height: 80px; }
+        .llm-item {
+            border: 1px solid #eee;
+            padding: 0.5em;
+            margin-bottom: 0.5em;
+            background-color: #f9f9f9;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5em;
+        }
+        .llm-item p { margin: 0; }
+        .llm-item textarea { margin-top: 0.2em; }
+        .llm-item .llm-header { display: flex; justify-content: space-between; align-items-center; }
+        .llm-item .llm-content { display: flex; flex-direction: column; gap: 0.2em; }
+        .llm-item .llm-prompt-response { display: flex; flex-direction: column; }
+        .llm-item .llm-prompt-response label { font-weight: bold; margin-bottom: 0.2em; }
+        .llm-item .llm-prompt-response textarea { flex-grow: 1; }
+        .llm-item .llm-actions { text-align: right; margin-top: 0.5em; }
         .tabs { display: flex; border-bottom: 1px solid #ccc; }
         .tab { padding: 0.5em 1em; cursor: pointer; }
         .tab.active { border: 1px solid #ccc; border-bottom: 1px solid white; }
         .tab-content { display: none; padding: 1em; border: 1px solid #ccc; border-top: none; }
         .tab-content.active { display: block; }
+        #perceptions li { white-space: pre-wrap; }
     </style>
 </head>
 <body>
@@ -36,12 +54,18 @@
         {% endfor %}
     </div>
 
-    <h1>Agent: {{ agent.name }}</h1>
+    {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
 
     <div class="dashboard">
         <div class="panel">
-            <h2>Vitals</h2>
-            <p><strong>Status:</strong> 
+            <h2>{{ agent.name }}</h2>
+            <p><strong>Status:</strong>
                 <span id="is_running" class="badge"></span>
                 <span id="phase" class="badge"></span>
             </p>
@@ -50,11 +74,18 @@
                 <button id="stop-agent">Stop</button>
                 <button id="reset-agent">Reset</button>
             </p>
+            <form method="post" style="display: flex; align-items: center; gap: 1em;">
+                {% csrf_token %}
+                <p>
+                    <label for="id_command">Command:</label>
+                    <input type="text" name="command" size="25" required id="id_command">
+                </p>
+                <button type="submit">Send</button>
+            </form>
             <p><strong>Location:</strong> <span id="location"></span></p>
             <p><strong>Level:</strong> <span id="level"></span></p>
             <p><strong>Tokens:</strong> <span id="tokens"></span></p>
-            <p><strong>Last Command Sent:</strong> <span id="last_command_sent"></span></p>
-            <p><strong>Last Retrieved:</strong> <span id="last_retrieved"></span></p>
+            
         </div>
 
         <div class="panel">
@@ -63,41 +94,30 @@
             <ul id="commands"></ul>
             <h3>Recent Perceptions</h3>
             <ul id="perceptions"></ul>
-            <h3>LLM Queue</h3>
+        </div>
+
+        <div class="panel" style="grid-column: span 2;">
+            <h2>Consolidated prompt</h2>
+            <details>
+                <summary>Base prompt</summary>
+                <div id="base_prompt_content"></div>
+            </details>
+            <details>
+                <summary>Loaded memories</summary>
+                <div id="loaded_memories_content"></div>
+            </details>
+            <details>
+                <summary>Perception</summary>
+                <div id="perception_content"></div>
+            </details>
+        </div>
+
+        <div class="panel" style="grid-column: span 2;">
+            <summary><h2>LLM Request History</h2></summary>
             <div id="llm_queue"></div>
         </div>
 
-        <div class="panel" style="grid-column: span 2;">
-            <h2>Prompt <button id="save-prompt">Save</button></h2>
-            <div class="tabs">
-                <div class="tab active" onclick="openTab(event, 'final_prompt')">Final Prompt</div>
-                <div class="tab" onclick="openTab(event, 'base_prompt')">Base Prompt</div>
-                <div class="tab" onclick="openTab(event, 'perception_buffer')">Perception Buffer</div>
-            </div>
-            <div id="final_prompt" class="tab-content active">
-                <textarea id="prompt_final" readonly></textarea>
-            </div>
-            <div id="base_prompt" class="tab-content">
-                <textarea id="prompt_base"></textarea>
-            </div>
-            <div id="perception_buffer" class="tab-content">
-                <textarea id="prompt_perception"></textarea>
-            </div>
-        </div>
-
-        <div class="panel" style="grid-column: span 2;">
-            <h2>Loaded Memories</h2>
-            <table id="loaded_memories" border="1" style="width:100%; border-collapse: collapse;">
-                <thead>
-                    <tr>
-                        <th>Key</th>
-                        <th>Value</th>
-                    </tr>
-                </thead>
-                <tbody>
-                </tbody>
-            </table>
-        </div>
+        
     </div>
 
     <script>
@@ -117,20 +137,6 @@
         }
         const csrftoken = getCookie('csrftoken');
 
-        function openTab(evt, tabName) {
-            var i, tabcontent, tablinks;
-            tabcontent = document.getElementsByClassName("tab-content");
-            for (i = 0; i < tabcontent.length; i++) {
-                tabcontent[i].style.display = "none";
-            }
-            tablinks = document.getElementsByClassName("tab");
-            for (i = 0; i < tablinks.length; i++) {
-                tablinks[i].className = tablinks[i].className.replace(" active", "");
-            }
-            document.getElementById(tabName).style.display = "block";
-            evt.currentTarget.className += " active";
-        }
-
         function updateData() {
             fetch(`/api/agent/{{ agent.name }}/`)
                 .then(response => response.json())
@@ -144,34 +150,32 @@
                     const phaseSpan = document.getElementById('phase');
                     phaseSpan.textContent = agent.phase;
                     phaseSpan.className = 'badge ' + agent.phase.toLowerCase();
-                    document.getElementById('location').textContent = agent.location;
+                    document.getElementById('location').textContent = `${agent.location}: ${agent.room_title}`;
                     document.getElementById('level').textContent = agent.level;
                     document.getElementById('tokens').textContent = agent.tokens;
-                    document.getElementById('last_command_sent').textContent = agent.last_command_sent ? new Date(agent.last_command_sent).toLocaleString() : 'N/A';
-                    document.getElementById('last_retrieved').textContent = agent.last_retrieved ? new Date(agent.last_retrieved).toLocaleString() : 'N/A';
 
                     // Buttons
                     document.getElementById('start-agent').disabled = agent.is_running;
                     document.getElementById('stop-agent').disabled = !agent.is_running;
 
                     // Prompts
-                    if (document.getElementById('prompt_base').readOnly) {
-                        document.getElementById('prompt_base').value = agent.prompt;
-                    }
-                    if (document.getElementById('prompt_perception').readOnly) {
-                        document.getElementById('prompt_perception').value = agent.perception;
-                    }
-                    document.getElementById('prompt_final').value = (agent.prompt || '') + '\n\n' + (agent.perception || '');
-
-
+                    document.getElementById('base_prompt_content').textContent = agent.prompt;
+                    document.getElementById('perception_content').textContent = agent.perception;
+                    
                     // Loaded Memories
-                    const memoriesTbody = document.querySelector('#loaded_memories tbody');
-                    memoriesTbody.innerHTML = '';
-                    data.loaded_memories.forEach(mem => {
-                        const row = memoriesTbody.insertRow();
-                        row.insertCell(0).textContent = mem.key;
-                        row.insertCell(1).textContent = mem.value;
-                    });
+                    const loadedMemoriesContent = document.getElementById('loaded_memories_content');
+                    loadedMemoriesContent.innerHTML = ''; // Clear previous content
+                    if (data.loaded_memories && data.loaded_memories.length > 0) {
+                        const ul = document.createElement('ul');
+                        data.loaded_memories.forEach(mem => {
+                            const li = document.createElement('li');
+                            li.textContent = `${mem.key}: ${mem.value}`;
+                            ul.appendChild(li);
+                        });
+                        loadedMemoriesContent.appendChild(ul);
+                    } else {
+                        loadedMemoriesContent.textContent = 'No memories loaded.';
+                    }
 
                     // Commands
                     const commandsUl = document.getElementById('commands');
@@ -191,12 +195,87 @@
                         perceptionsUl.appendChild(li);
                     });
 
-                    // LLM Queue
+                    // LLM Queue - Granular Update
                     const llmDiv = document.getElementById('llm_queue');
-                    const llm = data.llm_queue;
-                    if (llm && llm.date) {
-                        llmDiv.innerHTML = `<p>[${new Date(llm.date).toLocaleTimeString()}] Status: ${llm.status}</p><p>Response: ${llm.response || 'N/A'}</p>`;
-                    } else {
+                    const existingLlmItems = new Map();
+                    llmDiv.querySelectorAll('.llm-item').forEach(item => {
+                        existingLlmItems.set(item.dataset.llmId, item);
+                    });
+
+                    const newLlmIds = new Set();
+                    if (data.llm_queue && data.llm_queue.length > 0) {
+                        data.llm_queue.forEach(llm => {
+                            newLlmIds.add(String(llm.id)); // Ensure ID is string for consistency with dataset
+
+                            let llmItem = existingLlmItems.get(String(llm.id));
+                            if (llmItem) {
+                                // Check if any element within this llmItem is currently focused
+                                const isAnyChildFocused = llmItem.contains(document.activeElement);
+
+                                const statusSelect = llmItem.querySelector(`#llm-status-${llm.id}`);
+                                const responseTextarea = llmItem.querySelector(`#llm-response-${llm.id}`);
+                                const promptTextarea = llmItem.querySelector('textarea[readonly]');
+
+                                if (!isAnyChildFocused) {
+                                    // Update only if no child element is focused
+                                    if (statusSelect) {
+                                        statusSelect.value = llm.status;
+                                    }
+                                    if (responseTextarea) {
+                                        responseTextarea.value = llm.response || '';
+                                    }
+                                    if (promptTextarea) {
+                                        promptTextarea.value = llm.prompt;
+                                    }
+                                }
+
+                                // Always update time and status in summary, as it's not an input field and doesn't interfere with user input
+                                const summarySpan = llmItem.querySelector('summary span');
+                                if (summarySpan) {
+                                    summarySpan.textContent = `[${new Date(llm.date).toLocaleTimeString()}] Status: ${llm.status}`;
+                                }
+
+                            } else {
+                                // Create new item
+                                llmItem = document.createElement('div');
+                                llmItem.classList.add('llm-item');
+                                llmItem.dataset.llmId = llm.id;
+                                llmItem.innerHTML = `
+                                    <details>
+                                        <summary><span class="llm-time">[${new Date(llm.date).toLocaleTimeString()}]</span> Status: ${llm.status}</summary>
+                                        <div class="llm-header">
+                                            <p>Status: <select id="llm-status-${llm.id}">
+                                                <option value="pending" ${llm.status === 'pending' ? 'selected' : ''}>Pending</option>
+                                                <option value="thinking" ${llm.status === 'thinking' ? 'selected' : ''}>Thinking</option>
+                                                <option value="completed" ${llm.status === 'completed' ? 'selected' : ''}>Completed</option>
+                                                <option value="failed" ${llm.status === 'failed' ? 'selected' : ''}>Failed</option>
+                                                <option value="delivered" ${llm.status === 'delivered' ? 'selected' : ''}>Delivered</option>
+                                            </select></p>
+                                            <button class="update-llm-request" data-llm-id="${llm.id}">Save</button>
+                                        </div>
+                                        <div class="llm-content">
+                                            <div class="llm-prompt-response">
+                                                <label>Prompt:</label><textarea readonly>${llm.prompt}</textarea>
+                                            </div>
+                                            <div class="llm-prompt-response">
+                                                <label>Response:</label><textarea id="llm-response-${llm.id}">${llm.response || ''}</textarea>
+                                            </div>
+                                        </div>
+                                    </details>
+                                `;
+                                llmDiv.appendChild(llmItem);
+                            }
+                        });
+                    }
+
+                    // Remove old items that are no longer in the data
+                    existingLlmItems.forEach((item, id) => {
+                        if (!newLlmIds.has(id)) {
+                            item.remove();
+                        }
+                    });
+
+                    if (data.llm_queue.length === 0 && llmDiv.querySelectorAll('.llm-item').length === 0) {
                         llmDiv.innerHTML = '<p>No LLM activity.</p>';
                     }
                 });
@@ -234,39 +313,38 @@
             }
         });
 
-        // Logic for saving prompts
-        const savePromptBtn = document.getElementById('save-prompt');
-        const basePromptTextarea = document.getElementById('prompt_base');
-        const perceptionBufferTextarea = document.getElementById('prompt_perception');
+        document.getElementById('llm_queue').addEventListener('click', function(event) {
+            if (event.target.classList.contains('update-llm-request')) {
+                const llmId = event.target.dataset.llmId;
+                const newStatus = document.getElementById(`llm-status-${llmId}`).value;
+                const newResponse = document.getElementById(`llm-response-${llmId}`).value;
 
-        savePromptBtn.addEventListener('click', () => {
-            const newBasePrompt = basePromptTextarea.value;
-            const newPerceptionBuffer = perceptionBufferTextarea.value;
-
-            fetch(`/api/agent/{{ agent.name }}/update_prompt/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrftoken,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    prompt: newBasePrompt,
-                    perception: newPerceptionBuffer
-                })
-            }).then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    updateData(); // Refresh data to show updated final prompt
-                    alert('Prompt saved successfully!');
-                } else {
-                    alert('Error saving prompt: ' + data.message);
-                }
-            });
+                fetch(`/api/llm_queue/${llmId}/update/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrftoken,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status: newStatus, response: newResponse })
+                }).then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        updateData(); // Refresh data to show updated LLM request
+                        alert('LLM Request updated successfully!');
+                    } else {
+                        alert('Error updating LLM Request: ' + data.message);
+                    }
+                });
+            }
         });
 
         setInterval(updateData, 3000);
         updateData(); // Initial call
-    </script>
 
+        // Focus the command input field on page load
+        window.onload = function() {
+            document.getElementById('id_command').focus();
+        };
+    </script>
 </body>
 </html>

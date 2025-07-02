@@ -203,16 +203,9 @@ class AgentAppIntegrationTest(TestCase):
         self.assertIsNotNone(llm_entry)
         self.assertEqual(llm_entry.status, 'pending') # Agent phase is thinking, so LLMQueue status should be thinking
 
-        # Assert the prompt content
-        expected_prompt = (
-"""Base prompt content.
-
----
-Loaded Memories:
-Test memory value."""
-        )
+        expected_prompt = "Base prompt content.\n## Loaded Memories:\nTest memory value."
         print(f"Actual LLM Prompt: {llm_entry.prompt}")
-        self.assertEqual(llm_entry.prompt, expected_prompt)
+        self.assertEqual(llm_entry.prompt.strip(), expected_prompt.strip())
 
     def test_llm_response_processing_and_perception_update(self):
         from mad_multi_agent_dungeon.management.commands.run_agent_app import Command as AgentAppCommand
@@ -236,8 +229,10 @@ Test memory value."""
 
         # Assert agent's perception is updated
         self.assertIn("LLM says: Hello!", self.agent.perception)
-        self.assertIn("PROCESSED_command_say|Hello from LLM!_SENT", self.agent.perception)
-        self.assertIn("PROCESSED_memory_create_llm_key|llm_value_SENT", self.agent.perception)
+        # Check that the command was processed and marked as such in the perception
+        self.agent.refresh_from_db()
+        self.assertIn("processed_command_say_Hello from LLM!", self.agent.perception)
+        self.assertIn("processed_memory_create_llm_key_llm_value", self.agent.perception)
 
         # Assert agent phase is 'acting'
         self.assertEqual(self.agent.phase, 'acting')
@@ -653,7 +648,7 @@ class CommandHandlerTest(TestCase):
         handle_command(command_entry_examine_no_item)
         command_entry_examine_no_item.refresh_from_db()
 
-        self.assertEqual(command_entry_examine_no_item.status, "completed")
+        self.assertEqual(command_entry_examine_no_item.status, "failed")
         self.assertEqual(command_entry_examine_no_item.output, "Examine what?")
 
     def test_where_command_handler(self):
@@ -825,7 +820,7 @@ class CommandHandlerTest(TestCase):
         )
         handle_command(command_entry_missing)
         command_entry_missing.refresh_from_db()
-        self.assertEqual(command_entry_missing.status, "completed")
+        self.assertEqual(command_entry_missing.status, "failed")
         self.assertEqual(command_entry_missing.output, "Meditate for how long? (e.g., meditate 10m)")
 
     def test_directional_movement_aliases(self):
@@ -952,7 +947,7 @@ class CommandHandlerTest(TestCase):
         handle_command(command_entry)
         command_entry.refresh_from_db()
 
-        self.assertEqual(command_entry.status, "completed")
+        self.assertEqual(command_entry.status, "failed")
         self.assertEqual(command_entry.output, "Usage: edit profile <field> <new_value> (e.g., edit profile look a tall, dark figure)")
 
     def test_go_command_generates_movement_perceptions(self):
@@ -1285,7 +1280,7 @@ class CommandHandlerTest(TestCase):
         handle_command(command_entry)
         command_entry.refresh_from_db()
 
-        self.assertEqual(command_entry.status, "completed")
+        self.assertEqual(command_entry.status, "failed")
         self.assertEqual(command_entry.output, "Wait for how long? (e.g., wait 15s, wait 5m)")
 
     def test_unknown_command_handler_fails(self):

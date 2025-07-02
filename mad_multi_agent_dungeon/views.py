@@ -1,8 +1,11 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
 from .forms import SendCommandForm
 from .models import CommandQueue, PerceptionQueue, Agent, Memory, LLMQueue
 import json
+import os
+from django.conf import settings
+from django.contrib import messages
 
 def index(request):
     agents = Agent.objects.all()
@@ -45,8 +48,19 @@ def reset_agent(request, agent_name):
     agent = get_object_or_404(Agent, name=agent_name)
     CommandQueue.objects.filter(agent=agent).delete()
     PerceptionQueue.objects.filter(agent=agent).delete()
-    LLMQueue.objects.filter(agent=agent).delete()
-    return JsonResponse({'status': 'success', 'message': f'Queues for agent {agent.name} have been cleared.'})
+    LLMQueue.objects.filter(agent=agent, status__in=['pending', 'thinking']).update(status='failed')
+    agent.perception = ""
+
+    # Load base prompt from file
+    prompt_file_path = os.path.join(settings.BASE_DIR, 'prompts', f'{agent.name}.md')
+    if os.path.exists(prompt_file_path):
+        with open(prompt_file_path, 'r') as f:
+            agent.prompt = f.read()
+    else:
+        agent.prompt = ""
+
+    agent.save()
+    return JsonResponse({'status': 'success', 'message': f'Agent {agent.name} has been reset.'})
 
 def update_prompt(request, agent_name):
     if request.method == 'POST':
@@ -59,31 +73,38 @@ def update_prompt(request, agent_name):
     return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
 
 
-
-def send_command_api(request):
-    if request.method == 'POST':
-        form = SendCommandForm(request.POST)
-        if form.is_valid():
-            agent = form.cleaned_data['agent']
-            command_text = form.cleaned_data['command']
-            command = CommandQueue.objects.create(agent=agent, command=command_text)
-            return JsonResponse({'status': 'success', 'command_id': command.id})
-    return JsonResponse({'status': 'error'}, status=400)
-
 def agent_detail_view(request, agent_name):
     agent = get_object_or_404(Agent, name=agent_name)
     agents = Agent.objects.all().order_by('name')
-    return render(request, 'mad_multi_agent_dungeon/agent_detail.html', {'agent': agent, 'agents': agents})
+    if request.method == 'POST':
+        form = SendCommandForm(request.POST)
+        if form.is_valid():
+            command_text = form.cleaned_data['command']
+            CommandQueue.objects.create(agent=agent, command=command_text)
+            messages.success(request, f"Command '{command_text}' sent to {agent.name}.")
+            return redirect('agent_detail', agent_name=agent.name)
+    else:
+        form = SendCommandForm()
+
+    return render(request, 'mad_multi_agent_dungeon/agent_detail.html', {'agent': agent, 'agents': agents, 'form': form})
+
 
 def agent_detail_api(request, agent_name):
     agent = get_object_or_404(Agent, name=agent_name)
+
+    # Load map data
+    map_file_path = os.path.join(os.path.dirname(__file__), 'data', 'map.json')
+    with open(map_file_path, 'r') as f:
+        map_data = json.load(f)
+    
+    room_title = map_data['rooms'].get(agent.location, {}).get('title', 'Unknown Room')
 
     # Get last 5 commands
     commands = CommandQueue.objects.filter(agent=agent).order_by('-date')[:5]
     # Get last 5 perceptions
     perceptions = PerceptionQueue.objects.filter(agent=agent).order_by('-date')[:5]
-    # Get last LLM queue entry
-    llm_queue_entry = LLMQueue.objects.filter(agent=agent).order_by('-date').first()
+    # Get last 10 LLM queue entries, excluding 'delivered' ones
+    llm_queue_entries = LLMQueue.objects.filter(agent=agent).exclude(status='delivered').order_by('-date')[:10]
     # Get loaded memories
     loaded_memories = Memory.objects.filter(id__in=agent.memoriesLoaded)
 
@@ -93,6 +114,7 @@ def agent_detail_api(request, agent_name):
             'phase': agent.phase,
             'is_running': agent.is_running,
             'location': agent.location,
+            'room_title': room_title,
             'level': agent.level,
             'tokens': agent.tokens,
             'last_command_sent': agent.last_command_sent.isoformat() if agent.last_command_sent else None,
@@ -103,10 +125,49 @@ def agent_detail_api(request, agent_name):
         'loaded_memories': [{'key': m.key, 'value': m.value} for m in loaded_memories],
         'commands': [{'command': c.command, 'status': c.status, 'date': c.date.isoformat()} for c in commands],
         'perceptions': [{'text': p.text, 'date': p.date.isoformat()} for p in perceptions],
-        'llm_queue': {
-            'status': llm_queue_entry.status if llm_queue_entry else None,
-            'response': llm_queue_entry.response if llm_queue_entry else None,
-            'date': llm_queue_entry.date.isoformat() if llm_queue_entry else None,
-        }
+        'llm_queue': [
+            {
+                'id': entry.id,
+                'prompt': entry.prompt,
+                'status': entry.status,
+                'response': entry.response,
+                'date': entry.date.isoformat()
+            } for entry in llm_queue_entries
+        ]
     }
     return JsonResponse(data)
+
+def submit_llm_response(request, agent_name):
+    if request.method == 'POST':
+        agent = get_object_or_404(Agent, name=agent_name)
+        data = json.loads(request.body)
+        llm_id = data.get('llm_id')
+        llm_entry = get_object_or_404(LLMQueue, id=llm_id, agent=agent)
+        
+        if llm_entry.status == 'pending':
+            llm_entry.response = data.get('response', '')
+            llm_entry.status = 'completed'
+            llm_entry.save()
+            return JsonResponse({'status': 'success', 'message': 'LLM response submitted successfully.'})
+        else:
+            return JsonResponse({'status': 'error', 'message': 'This request is not pending.'}, status=400)
+            
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+def update_llm_request(request, llm_id):
+    if request.method == 'POST':
+        try:
+            llm_entry = get_object_or_404(LLMQueue, id=llm_id)
+            data = json.loads(request.body)
+            new_status = data.get('status')
+            new_response = data.get('response')
+
+            if new_status:
+                llm_entry.status = new_status
+            if new_response is not None:
+                llm_entry.response = new_response
+            llm_entry.save()
+            return JsonResponse({'status': 'success', 'message': 'LLM Request updated successfully.'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)

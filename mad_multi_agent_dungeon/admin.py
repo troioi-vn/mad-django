@@ -16,46 +16,8 @@ class MyAdminSite(admin.AdminSite):
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
-            path('send_command/', self.admin_view(self.send_command_view), name='send_command'),
-            path('command_log_api/', self.admin_view(self.command_log_api), name='command_log_api'),
         ]
         return custom_urls + urls
-
-    def send_command_view(self, request):
-        if request.method == 'POST':
-            form = SendCommandForm(request.POST)
-            if form.is_valid():
-                agent = form.cleaned_data['agent']
-                command_text = form.cleaned_data['command']
-                CommandQueue.objects.create(agent=agent, command=command_text)
-                self.message_user(request, f"Command '{command_text}' sent to {agent.name}.")
-        else:
-            form = SendCommandForm()
-        context = {
-            'site_header': self.site_header,
-            'site_title': self.site_title,
-            'index_title': self.index_title,
-            'form': form,
-        }
-        return render(request, 'admin/send_command.html', context)
-
-    def command_log_api(self, request):
-        perceptions = PerceptionQueue.objects.order_by('-date')[:20]
-        log_entries = []
-        for p in perceptions:
-            entry = {
-                'date': timezone.localtime(p.date).strftime("%Y-%m-%d %H:%M:%S"),
-                'text': p.text,
-                'agent_name': p.agent.name,
-                'type': p.type,
-            }
-            if p.type == 'command' and p.command:
-                entry['command_id'] = p.command.id
-                entry['command_text'] = p.command.command
-                entry['command_output'] = p.command.output
-            log_entries.append(entry)
-        return JsonResponse({'log': log_entries})
-
 
 admin_site = MyAdminSite(name='myadmin')
 
