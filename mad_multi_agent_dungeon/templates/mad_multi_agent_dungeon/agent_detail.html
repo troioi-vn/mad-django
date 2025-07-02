@@ -106,7 +106,8 @@
         </div>
 
         <div class="panel" style="grid-column: span 2;">
-            <h2>Consolidated prompt</h2>
+            <h2>Consolidated prompt <button id="copy-consolidated-prompt">Copy</button></h2>
+            <textarea id="consolidated_prompt_textarea" rows="10" readonly style="width: 100%; display: none;"></textarea>
             <details>
                 <summary>Base prompt</summary>
                 <div id="base_prompt_content"></div>
@@ -170,8 +171,9 @@
                     // Prompts
                     document.getElementById('base_prompt_content').textContent = agent.prompt;
                     document.getElementById('perception_content').textContent = agent.perception;
-                    
-                    // Loaded Memories
+
+                    // Consolidated Prompt
+                    let consolidatedPrompt = agent.prompt;
                     const loadedMemoriesContent = document.getElementById('loaded_memories_content');
                     loadedMemoriesContent.innerHTML = ''; // Clear previous content
                     if (data.loaded_memories && data.loaded_memories.length > 0) {
@@ -180,11 +182,14 @@
                             const li = document.createElement('li');
                             li.textContent = `${mem.key}: ${mem.value}`;
                             ul.appendChild(li);
+                            consolidatedPrompt += `\n${mem.key}: ${mem.value}`;
                         });
                         loadedMemoriesContent.appendChild(ul);
                     } else {
                         loadedMemoriesContent.textContent = 'No memories loaded.';
                     }
+                    consolidatedPrompt += `\n${agent.perception}`;
+                    document.getElementById('consolidated_prompt_textarea').value = consolidatedPrompt;
 
                     // Commands
                     const commandsUl = document.getElementById('commands');
@@ -311,15 +316,13 @@
         });
 
         document.getElementById('reset-agent').addEventListener('click', function() {
-            if (confirm('Are you sure you want to reset this agent? This will clear all its queues.')) {
-                fetch(`/api/agent/{{ agent.name }}/reset/`, {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': csrftoken,
-                        'Content-Type': 'application/json'
-                    }
-                }).then(() => updateData());
-            }
+            fetch(`/api/agent/{{ agent.name }}/reset/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/json'
+                }
+            }).then(() => updateData());
         });
 
         document.getElementById('llm_queue').addEventListener('click', function(event) {
@@ -351,6 +354,13 @@
         updateData(); // Initial call
 
         // Focus the command input field on page load
+        document.getElementById('copy-consolidated-prompt').addEventListener('click', function() {
+            const textarea = document.getElementById('consolidated_prompt_textarea');
+            textarea.select();
+            textarea.setSelectionRange(0, 99999); // For mobile devices
+            document.execCommand('copy');
+        });
+
         window.onload = function() {
             document.getElementById('id_command').focus();
         };
