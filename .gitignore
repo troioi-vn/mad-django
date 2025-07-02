@@ -60,7 +60,7 @@ coverage.xml
 *.log
 local_settings.py
 db.sqlite3
-db.sqlite3-journal
+dbsqlite3-journal
 
 # Flask stuff:
 instance/
@@ -143,3 +143,6 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# Node.js modules
+node_modules/
