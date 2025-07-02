@@ -23,16 +23,22 @@ def look_handler(command_entry):
     if room_data:
         room_title = room_data.get("title", f"Room {room_id}")
         room_description = room_data.get("description", "No description available.")
+        exits = room_data.get("exits", {})
+        available_exits = ", ".join(exits.keys()) if exits else "none"
     else:
         room_title = f"Room {room_id}"
         room_description = "An unknown room."
+        available_exits = "none"
 
     output_lines = [f"{room_title}", f"{room_description}"]
 
-    # Find other agents in the same room
-    other_agents = Agent.objects.filter(location=room_id).exclude(pk=agent.pk)
-    if other_agents.exists():
-        agent_names = ", ".join([a.name for a in other_agents])
+    # Add exits to the output
+    output_lines.append(f"Exits: {available_exits}")
+
+    # Find other active agents in the same room
+    active_agents = [a.name for a in Agent.objects.filter(location=room_id).exclude(pk=agent.pk) if a.is_active()]
+    if active_agents:
+        agent_names = ", ".join(active_agents)
         output_lines.append(f"Other agents here: {agent_names}")
 
     # Find objects in the current room
@@ -71,8 +77,7 @@ def go_handler(command_entry):
 
     if target_room_id:
         # Notify agents in the old room that this agent is leaving
-        active_agents_in_old_room = Agent.objects.filter(location=old_room_id).exclude(pk=agent.pk)
-        for other_agent in active_agents_in_old_room:
+        for other_agent in Agent.objects.filter(location=old_room_id).exclude(pk=agent.pk):
             if other_agent.is_active():
                 PerceptionQueue.objects.create(
                     agent=other_agent,
@@ -92,8 +97,7 @@ def go_handler(command_entry):
         }
         arrives_from_direction = opposite_directions.get(direction, "somewhere")
 
-        active_agents_in_new_room = Agent.objects.filter(location=target_room_id).exclude(pk=agent.pk)
-        for other_agent in active_agents_in_new_room:
+        for other_agent in Agent.objects.filter(location=target_room_id).exclude(pk=agent.pk):
             if other_agent.is_active():
                 PerceptionQueue.objects.create(
                     agent=other_agent,
@@ -104,7 +108,9 @@ def go_handler(command_entry):
 
         target_room_data = MAP_DATA['rooms'].get(target_room_id)
         if target_room_data:
-            command_entry.output = f"{target_room_data['title']}\n{target_room_data['description']}"
+            exits = target_room_data.get("exits", {})
+            available_exits = ", ".join(exits.keys()) if exits else "none"
+            command_entry.output = f"{target_room_data['title']}\n{target_room_data['description']}\nExits: {available_exits}"
         else:
             command_entry.output = f"Moved to unknown room: {target_room_id}"
         command_entry.status = "completed"
@@ -114,6 +120,7 @@ def go_handler(command_entry):
         command_entry.status = "completed"
 
     command_entry.save()
+
 
 def inventory_handler(command_entry):
     agent = command_entry.agent
@@ -333,28 +340,28 @@ def say_handler(command_entry):
     command_entry.save()
 
     from .models import PerceptionQueue # Import PerceptionQueue
-    # Send message to other agents in the same room
-    other_agents = Agent.objects.filter(location=agent.location).exclude(pk=agent.pk)
-    for other_agent in other_agents:
-        PerceptionQueue.objects.create(
-            agent=other_agent,
-            source_agent=agent, # The agent who said the message
-            type='none', # Environmental perception
-            text=f'{agent.name} says: "{message}"'
-        )
+    # Send message to other active agents in the same room
+    for other_agent in Agent.objects.filter(location=agent.location).exclude(pk=agent.pk):
+        if other_agent.is_active():
+            PerceptionQueue.objects.create(
+                agent=other_agent,
+                source_agent=agent, # The agent who said the message
+                type='none', # Environmental perception
+                text=f'{agent.name} says: "{message}"'
+            )
 
 def edit_profile_handler(command_entry):
     agent = command_entry.agent
-    parts = command_entry.command.split(maxsplit=2)
+    parts = command_entry.command.split(maxsplit=3) # Changed maxsplit to 3
 
-    if len(parts) < 3:
+    if len(parts) < 4: # Changed to 4 parts expected
         command_entry.output = "Usage: edit profile <field> <new_value> (e.g., edit profile look a tall, dark figure)"
         command_entry.status = "completed"
         command_entry.save()
         return
 
-    field = parts[1].lower()
-    new_value = parts[2]
+    field = parts[2].lower() # Changed index to 2
+    new_value = parts[3] # Changed index to 3
 
     if field == 'look':
         agent.look = new_value

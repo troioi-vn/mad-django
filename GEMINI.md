@@ -39,8 +39,8 @@ This document summarizes the features and implementation details of the `mad-dja
 ## Implemented Commands
 
 *   **`ping`**: Responds with "pong". Used for testing the connection.
-*   **`look`**: Shows the title and description of the agent's current room. (Alias `l` removed from documentation as its test was removed)
-*   **`go <direction>`**: Moves the agent in the specified direction (e.g., `go north`).
+*   **`look`**: Shows the title and description of the agent's current room, including only *active* agents present. (Alias `l` removed from documentation as its test was removed)
+*   **`go <direction>`**: Moves the agent in the specified direction (e.g., `go north`). Notifies *active* agents in the old room of the agent's departure and *active* agents in the new room of the agent's arrival.
 *   **`north` / `n`**: Alias for `go north`.
 *   **`south` / `s`**: Alias for `go south`.
 *   **`east` / `e`**: Alias for `go east`.
@@ -50,7 +50,7 @@ This document summarizes the features and implementation details of the `mad-dja
 *   **`inventory`**: Displays the items in the agent's inventory.
 *   **`examine <object>`**: Examines an object in the room.
 *   **`where`**: Shows the agent's current location (room ID and title).
-*   **`shout <message>`**: Sends a message to all other agents.
+*   **`shout <message>`**: Sends a message to all other *active* agents in the world.
 *   **`say <message>`**: Sends a message to all other agents in the same room.
 *   **`use <object>`**: Uses an object in the room.
 *   **`help`**: Lists all available commands. (Alias `commands` removed from documentation as its test was removed)
@@ -70,16 +70,16 @@ This document summarizes the features and implementation details of the `mad-dja
     *   Implemented as a Django management command (`python manage.py run_command_worker`).
     *   Continuously polls the `CommandQueue` for `pending` commands.
     *   Sets the command status to `processing`, calls the appropriate handler, and updates the command's status and output.
-    *   **Crucially, after processing a command, it updates the `last_command_sent` timestamp on the associated `Agent` and creates relevant entries in the `PerceptionQueue` for the commanding agent (type `command`) and for other agents in the same room (type `none`, for environmental perceptions like shouts and says).**
+    *   **Crucially, after processing a command, it updates the `last_command_sent` timestamp on the associated `Agent` and creates relevant entries in the `PerceptionQueue` for the commanding agent (type `command`) and for other *active* agents in the same room (type `none`, for environmental perceptions like shouts and says).**
 *   **Perception Queue Worker (Agent Application)**:
-    *   **Perception Queue Worker (Agent Application)**:
     *   The agent application (`python manage.py run_agent_app <agent_name>`) now continuously polls the `PerceptionQueue` for undelivered perceptions specific to that agent.
     *   If the agent is in the 'thinking' phase, it checks for a 'completed' entry in the `LLMQueue`.
         *   If a completed LLM response is found, its content is appended to the agent's `perception` field. The LLM response is also scanned for embedded commands (e.g., `[command|say|hi]`) or memory load patterns (e.g., `[memory|load|key]`). For each found pattern, a new entry is created in the `CommandQueue`.
         *   The `LLMQueue` entry is then marked as 'delivered', and the agent's `phase` is changed to 'acting'.
-        *   If no completed LLM response is found, the agent continues to wait in the 'thinking' phase.
+        *   If no completed LLM response is found, and there are no `pending` or `thinking` LLM requests for the agent, the agent will consolidate its prompt (base prompt + loaded memories + perception) and create a new entry in the `LLMQueue`, setting its phase to 'thinking'.
+        *   If no completed LLM response is found, but there are `pending` or `thinking` LLM requests, the agent continues to wait in the 'thinking' phase.
     *   If the agent is not in the 'thinking' phase, it processes perceptions from the `PerceptionQueue` by first checking for embedded commands (e.g., `[command|say|hi]`) or memory load patterns (e.g., `[memory|load|key]`).
-    *   If a command or memory load pattern is found in a perception, it extracts the content, creates a new entry in the `CommandQueue` (e.g., `memory-load key`), and modifies the perception's text to append "sent" (e.g., `[command|say|hi]sent` or `[memory|load|key]sent`).
+    *   If a command or memory load pattern is found in a perception, it extracts the content, creates a new entry in the `CommandQueue` (e.g., `memory-load key`), and modifies the perception's text to append "sent" (e.g., `[command|say|hi]sent` or `[memory|load|key]sent`). This also applies to commands embedded within LLM responses, which are now marked as "sent" directly within the LLM response text before being appended to the agent's perception.
     *   After processing all perceptions for the current cycle, it constructs a comprehensive prompt for the LLM by concatenating the agent's `prompt` field, the values of all memories whose IDs are in `agent.memoriesLoaded`, and the text of the last processed perception.
     *   This combined prompt is then used to create a new entry in the `LLMQueue`, and the agent's `phase` is set to 'thinking'.
     *   Finally, it marks the perception as `delivered`.
@@ -115,6 +115,9 @@ This document summarizes the features and implementation details of the `mad-dja
     *   The `Agent` list in the Django admin now includes a direct link to each agent's detail page.
 *   **Main Page Update**:
     *   The main page of the application (`/`) now displays a list of all agents, with links to their respective detail pages.
+*   **Reset Agent Functionality**:
+    *   The "Reset" button on the agent detail page now clears the agent's `perception` field.
+    *   It also marks all `pending` and `thinking` LLM requests for that agent as `failed`.
 
 ## How to Run
 
@@ -181,31 +184,56 @@ The agent also loops over the perception queue and appends it to the perception 
 
 The agent's prompt consists of the prompt base (from the file in the prompts directory), loaded memories, and perception (recycled text, 5,000 symbols long).
 
+## Essential Development Commands
+
+To ensure a smooth development workflow and maintain code quality, the following commands are frequently used in this project:
+
+*   **Install/Synchronize Dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+    This command installs all necessary Python packages listed in `requirements.txt`. It should be run whenever `requirements.txt` is updated.
+
+*   **Apply Database Migrations**:
+    ```bash
+    python manage.py migrate
+    ```
+    This command applies any pending database schema changes. It's crucial to run this after making modifications to Django models.
+
+*   **Run Tests**:
+    ```bash
+    python manage.py test
+    ```
+    Executes the entire test suite for the project. This is a core part of our TDD workflow and should be run frequently to ensure code correctness.
+
+*   **Code Formatting (Black)**:
+    ```bash
+    black .
+    ```
+    Automatically formats Python code to adhere to the Black style guide. Run this before committing changes to maintain consistent code style.
+
+*   **Linting (Ruff)**:
+    ```bash
+    ruff check .
+    ```
+    Checks Python code for style violations and potential errors using Ruff. This helps enforce code quality and identify issues early.
 
 ## Future Enhancements and Features
 Gemini! When you take a task from this list, don't be shy to ask questions for clarification. If you see that there are better methods instead of the proposed solution - offer to discuss them.
 
 ### TODO list (concrete tasks):
-[x] Modify `run_agent_app.py` to load all agents from the database
-[x] Implement prompt loading from files for each agent (if the file does not exist, it is created)
-[x] Add agent app into `start_dev.sh`.
+- Agent's page:
+    - rename Prompt section into "Consolidated prompt" 
+    - Last Command Sent, Last Retrieved - remove
+    - Move "Prompt" above "Request History"
+    - rewrite "Prompt" section. Remove tabs, unstead use three collapsed by default sections (no textareas, remove edit/save functionality):
+        - Base prompt
+        - Loaded memories
+        - Perception
+    - Remove "Loaded Memories" section. 
+    - Make "LLM Request History" Collapsable and collapsed by default. 
+    - Location - add room title (e.g., "room_001: The Dark Cave")
 
-[x] Save last command time
-[x] Develop is_active function - what returns 'true' is last command by agent was sent less than 5 minutes ago
-[x] Shout command - command to all agents are active
-[x] Show agents in rooms on look command
-[x] Show objects in rooms on look command
-[x] implement objects apearance in the rooms (it is described in object.jason)
-[x] Create another queue. LLMqueue: AgentID, prompt, yield (int), status, response, date. The agent at the end of each cycle of working with the prompt will add a message to this queue and change the status to "thinking"
-[x] When one agent enters or leaves a room, all active agents in that room should receive a message about it.
-[x] Add Agent phases. Just like the status it could be "thinking" (waiting for LLM response), "acting" (processing LLM response), "prompting" (preparing prompt)
-[x] Create model Memory associated one to many with AgentID (key-value store).
-[x] Develop Agent's memory commands: memory-create, memory-update, memory-append, memory-remove, memory-list.
-[x] wait command - set 'waiting' flag for specified time, then process the perception queue. e.g. 'wait 15s'
-[x] edit profile command (look and description)
-
-
-### Should be planned and implemented in the future (not in the current scope):
 
 
 

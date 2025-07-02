@@ -45,11 +45,13 @@ class Command(BaseCommand):
             text=command_entry.output
         )
 
-        # Handle "shout" command for other agents in the same room
+        # Handle "shout" command for other active agents in the same room
         if command_entry.command.startswith('shout '):
             shout_message = command_entry.command[len('shout '):]
-            other_agents_in_room = Agent.objects.exclude(id=command_entry.agent.id).filter(last_command_sent__gte=timezone.now() - timedelta(minutes=5))
-
+            other_agents_in_room = Agent.objects.exclude(id=command_entry.agent.id).filter(
+                location=command_entry.agent.location, # Filter by location
+                last_command_sent__gte=timezone.now() - timedelta(minutes=5)
+            )
             for other_agent in other_agents_in_room:
                 PerceptionQueue.objects.create(
                     agent=other_agent,

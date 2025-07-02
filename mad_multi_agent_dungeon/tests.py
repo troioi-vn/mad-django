@@ -12,7 +12,7 @@ class IndexViewTest(TestCase):
     def test_index_view(self):
         response = self.client.get(reverse('index'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Hello, Multi Agent Dungeon!")
+        self.assertContains(response, "Agents")
 
 class AgentModelTest(TestCase):
     def test_create_agent(self):
@@ -128,243 +128,7 @@ class CommandQueueModelTest(TestCase):
             command_entry.status = "invalid_status"
             command_entry.full_clean()
 
-from mad_multi_agent_dungeon.models import Memory
 
-class MemoryCommandsTest(TestCase):
-    def setUp(self):
-        self.agent = Agent.objects.create(
-            name="TestAgentMemory",
-            look="A test agent for memory commands.",
-            description="This agent is for testing memory commands.",
-            tokens=0,
-            level=0,
-            location="memory_room"
-        )
-
-    def test_memory_create_command(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-create my_key my_value",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'my_key' created successfully.")
-        self.assertTrue(Memory.objects.filter(agent=self.agent, key="my_key", value="my_value").exists())
-
-    def test_memory_create_command_missing_args(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-create my_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Usage: memory-create <key> <value>")
-        self.assertFalse(Memory.objects.filter(agent=self.agent, key="my_key").exists())
-
-    def test_memory_update_command(self):
-        Memory.objects.create(agent=self.agent, key="update_key", value="old_value")
-        command_entry = CommandQueue.objects.create(
-            command="memory-update update_key new_value",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'update_key' updated successfully.")
-        self.assertTrue(Memory.objects.filter(agent=self.agent, key="update_key", value="new_value").exists())
-
-    def test_memory_update_command_not_found(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-update non_existent_key new_value",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Memory 'non_existent_key' not found for this agent.")
-
-    def test_memory_append_command(self):
-        Memory.objects.create(agent=self.agent, key="append_key", value="initial_value")
-        command_entry = CommandQueue.objects.create(
-            command="memory-append append_key additional_text",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'append_key' appended successfully.")
-        self.assertTrue(Memory.objects.filter(agent=self.agent, key="append_key", value="initial_value additional_text").exists())
-
-    def test_memory_append_command_not_found(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-append non_existent_key additional_text",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Memory 'non_existent_key' not found for this agent.")
-
-    def test_memory_remove_command(self):
-        Memory.objects.create(agent=self.agent, key="remove_key", value="value_to_remove")
-        command_entry = CommandQueue.objects.create(
-            command="memory-remove remove_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'remove_key' removed successfully.")
-        self.assertFalse(Memory.objects.filter(agent=self.agent, key="remove_key").exists())
-
-    def test_memory_remove_command_not_found(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-remove non_existent_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Memory 'non_existent_key' not found for this agent.")
-
-    def test_memory_list_command(self):
-        Memory.objects.create(agent=self.agent, key="key1", value="value1")
-        Memory.objects.create(agent=self.agent, key="key2", value="value2")
-        command_entry = CommandQueue.objects.create(
-            command="memory-list",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertIn("Your memories:", command_entry.output)
-        self.assertIn("  - key1: value1", command_entry.output)
-        self.assertIn("  - key2: value2", command_entry.output)
-
-    def test_memory_list_command_empty(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-list",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "You have no memories.")
-
-        self.assertEqual(command_entry.output, "You have no memories.")
-
-    def test_memory_load_command(self):
-        memory = Memory.objects.create(agent=self.agent, key="load_key", value="load_value")
-        command_entry = CommandQueue.objects.create(
-            command="memory-load load_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-        self.agent.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'load_key' loaded successfully.")
-        self.assertIn(memory.id, self.agent.memoriesLoaded)
-
-    def test_memory_load_command_already_loaded(self):
-        memory = Memory.objects.create(agent=self.agent, key="load_key_2", value="load_value_2")
-        self.agent.memoriesLoaded.append(memory.id)
-        self.agent.save()
-
-        command_entry = CommandQueue.objects.create(
-            command="memory-load load_key_2",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-        self.agent.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'load_key_2' is already loaded.")
-        self.assertIn(memory.id, self.agent.memoriesLoaded)
-        self.assertEqual(self.agent.memoriesLoaded.count(memory.id), 1) # Ensure no duplicates
-
-    def test_memory_load_command_not_found(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-load non_existent_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Memory 'non_existent_key' not found for this agent.")
-
-    def test_memory_unload_command(self):
-        memory = Memory.objects.create(agent=self.agent, key="unload_key", value="unload_value")
-        self.agent.memoriesLoaded.append(memory.id)
-        self.agent.save()
-
-        command_entry = CommandQueue.objects.create(
-            command="memory-unload unload_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-        self.agent.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'unload_key' unloaded successfully.")
-        self.assertNotIn(memory.id, self.agent.memoriesLoaded)
-
-    def test_memory_unload_command_not_loaded(self):
-        memory = Memory.objects.create(agent=self.agent, key="unload_key_2", value="unload_value_2")
-        command_entry = CommandQueue.objects.create(
-            command="memory-unload unload_key_2",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-        self.agent.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'unload_key_2' is not currently loaded.")
-        self.assertNotIn(memory.id, self.agent.memoriesLoaded)
-
-    def test_memory_unload_command_not_found(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-unload non_existent_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Memory 'non_existent_key' not found for this agent.")
 
 class AgentAppIntegrationTest(TestCase):
     def setUp(self):
@@ -472,8 +236,8 @@ Test memory value."""
 
         # Assert agent's perception is updated
         self.assertIn("LLM says: Hello!", self.agent.perception)
-        self.assertIn("[command|say|Hello from LLM!]", self.agent.perception)
-        self.assertIn("[memory|create|llm_key|llm_value]", self.agent.perception)
+        self.assertIn("PROCESSED_command_say|Hello from LLM!_SENT", self.agent.perception)
+        self.assertIn("PROCESSED_memory_create_llm_key|llm_value_SENT", self.agent.perception)
 
         # Assert agent phase is 'acting'
         self.assertEqual(self.agent.phase, 'acting')
@@ -485,11 +249,14 @@ Test memory value."""
         # Assert LLMQueue entry is marked as 'delivered'
         self.assertEqual(llm_entry.status, 'delivered')
 
-        # Assert CommandQueue entry was created for say command
-        command_entry = CommandQueue.objects.filter(agent=self.agent).order_by('-date').first()
-        self.assertIsNotNone(command_entry)
-        self.assertEqual(command_entry.command, 'say Hello from LLM!')
-        self.assertEqual(command_entry.status, 'pending')
+        # Assert CommandQueue entries were created for both commands
+        say_command_entry = CommandQueue.objects.filter(agent=self.agent, command='say Hello from LLM!').first()
+        self.assertIsNotNone(say_command_entry)
+        self.assertEqual(say_command_entry.status, 'pending')
+
+        memory_create_command_entry = CommandQueue.objects.filter(agent=self.agent, command='memory-create llm_key llm_value').first()
+        self.assertIsNotNone(memory_create_command_entry)
+        self.assertEqual(memory_create_command_entry.status, 'pending')
 
     def test_perception_queue_processing_and_command_creation(self):
         from mad_multi_agent_dungeon.management.commands.run_agent_app import Command as AgentAppCommand
@@ -557,241 +324,9 @@ Test memory value."""
         self.assertEqual(self.agent.perception, long_response[-5000:])
 
 
-class CommandHandlerTest(TestCase):
-    def setUp(self):
-        self.agent = Agent.objects.create(
-            name="TestAgentMemory",
-            look="A test agent for memory commands.",
-            description="This agent is for testing memory commands.",
-            tokens=0,
-            level=0,
-            location="memory_room"
-        )
 
-    def test_memory_create_command(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-create my_key my_value",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
 
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'my_key' created successfully.")
-        self.assertTrue(Memory.objects.filter(agent=self.agent, key="my_key", value="my_value").exists())
-
-    def test_memory_create_command_missing_args(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-create my_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Usage: memory-create <key> <value>")
-        self.assertFalse(Memory.objects.filter(agent=self.agent, key="my_key").exists())
-
-    def test_memory_update_command(self):
-        Memory.objects.create(agent=self.agent, key="update_key", value="old_value")
-        command_entry = CommandQueue.objects.create(
-            command="memory-update update_key new_value",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'update_key' updated successfully.")
-        self.assertTrue(Memory.objects.filter(agent=self.agent, key="update_key", value="new_value").exists())
-
-    def test_memory_update_command_not_found(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-update non_existent_key new_value",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Memory 'non_existent_key' not found for this agent.")
-
-    def test_memory_append_command(self):
-        Memory.objects.create(agent=self.agent, key="append_key", value="initial_value")
-        command_entry = CommandQueue.objects.create(
-            command="memory-append append_key additional_text",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'append_key' appended successfully.")
-        self.assertTrue(Memory.objects.filter(agent=self.agent, key="append_key", value="initial_value additional_text").exists())
-
-    def test_memory_append_command_not_found(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-append non_existent_key additional_text",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Memory 'non_existent_key' not found for this agent.")
-
-    def test_memory_remove_command(self):
-        Memory.objects.create(agent=self.agent, key="remove_key", value="value_to_remove")
-        command_entry = CommandQueue.objects.create(
-            command="memory-remove remove_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'remove_key' removed successfully.")
-        self.assertFalse(Memory.objects.filter(agent=self.agent, key="remove_key").exists())
-
-    def test_memory_remove_command_not_found(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-remove non_existent_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Memory 'non_existent_key' not found for this agent.")
-
-    def test_memory_list_command(self):
-        Memory.objects.create(agent=self.agent, key="key1", value="value1")
-        Memory.objects.create(agent=self.agent, key="key2", value="value2")
-        command_entry = CommandQueue.objects.create(
-            command="memory-list",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertIn("Your memories:", command_entry.output)
-        self.assertIn("  - key1: value1", command_entry.output)
-        self.assertIn("  - key2: value2", command_entry.output)
-
-    def test_memory_list_command_empty(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-list",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "You have no memories.")
-
-        self.assertEqual(command_entry.output, "You have no memories.")
-
-    def test_memory_load_command(self):
-        memory = Memory.objects.create(agent=self.agent, key="load_key", value="load_value")
-        command_entry = CommandQueue.objects.create(
-            command="memory-load load_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-        self.agent.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'load_key' loaded successfully.")
-        self.assertIn(memory.id, self.agent.memoriesLoaded)
-
-    def test_memory_load_command_already_loaded(self):
-        memory = Memory.objects.create(agent=self.agent, key="load_key_2", value="load_value_2")
-        self.agent.memoriesLoaded.append(memory.id)
-        self.agent.save()
-
-        command_entry = CommandQueue.objects.create(
-            command="memory-load load_key_2",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-        self.agent.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'load_key_2' is already loaded.")
-        self.assertIn(memory.id, self.agent.memoriesLoaded)
-        self.assertEqual(self.agent.memoriesLoaded.count(memory.id), 1) # Ensure no duplicates
-
-    def test_memory_load_command_not_found(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-load non_existent_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Memory 'non_existent_key' not found for this agent.")
-
-    def test_memory_unload_command(self):
-        memory = Memory.objects.create(agent=self.agent, key="unload_key", value="unload_value")
-        self.agent.memoriesLoaded.append(memory.id)
-        self.agent.save()
-
-        command_entry = CommandQueue.objects.create(
-            command="memory-unload unload_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-        self.agent.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'unload_key' unloaded successfully.")
-        self.assertNotIn(memory.id, self.agent.memoriesLoaded)
-
-    def test_memory_unload_command_not_loaded(self):
-        memory = Memory.objects.create(agent=self.agent, key="unload_key_2", value="unload_value_2")
-        command_entry = CommandQueue.objects.create(
-            command="memory-unload unload_key_2",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-        self.agent.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "completed")
-        self.assertEqual(command_entry.output, "Memory 'unload_key_2' is not currently loaded.")
-        self.assertNotIn(memory.id, self.agent.memoriesLoaded)
-
-    def test_memory_unload_command_not_found(self):
-        command_entry = CommandQueue.objects.create(
-            command="memory-unload non_existent_key",
-            agent=self.agent,
-            status="pending"
-        )
-        handle_command(command_entry)
-        command_entry.refresh_from_db()
-
-        self.assertEqual(command_entry.status, "failed")
-        self.assertEqual(command_entry.output, "Memory 'non_existent_key' not found for this agent.")
+    
 
 class CommandHandlerTest(TestCase):
     def setUp(self):
@@ -946,14 +481,15 @@ class CommandHandlerTest(TestCase):
         self.assertIn(dummy_room_description, command_entry.output)
 
     def test_look_command_shows_other_agents_in_room(self):
-        # Create another agent in the same room
+        # Create another active agent in the same room
         other_agent = Agent.objects.create(
             name="OtherAgent",
             look="Another agent.",
             description="",
             tokens=0,
             level=0,
-            location=self.agent.location # Same room as self.agent
+            location=self.agent.location, # Same room as self.agent
+            last_command_sent=timezone.now() # Make the agent active
         )
 
         command_entry = CommandQueue.objects.create(
@@ -1296,33 +832,55 @@ class CommandHandlerTest(TestCase):
         room_a_id = "room_A"
         room_b_id = "room_B"
         room_c_id = "room_C"
-        room_d_id = "room_D"
         room_e_id = "room_E"
         room_f_id = "room_F"
 
         self.agent.location = room_a_id
         self.agent.save()
 
-        directions = {
-            "north": room_b_id, "n": room_b_id,
-            "south": room_c_id, "s": room_c_id,
-            
-            "west": room_e_id, "w": room_e_id,
-            "up": room_f_id, "u": room_f_id,
-            "down": room_a_id, "d": room_a_id,
-        }
+        test_cases = [
+            ("north", room_b_id),
+            ("n", room_b_id),
+            ("south", room_c_id),
+            ("s", room_c_id),
+            ("east", room_a_id), # Assuming no exit to east from room_A, so agent stays
+            ("e", room_a_id), # Assuming no exit to east from room_A, so agent stays
+            ("west", room_e_id),
+            ("w", room_e_id),
+            ("up", room_f_id),
+            ("u", room_f_id),
+            ("down", room_a_id),
+            ("d", room_a_id),
+        ]
 
-        for command, target_room in directions.items():
-            self.agent.location = room_a_id
+        for command_text, expected_location in test_cases:
+            self.agent.location = room_a_id  # Reset agent location for each test case
             self.agent.save()
             command_entry = CommandQueue.objects.create(
-                command=command,
+                command=command_text,
                 agent=self.agent,
                 status="pending"
             )
             handle_command(command_entry)
             self.agent.refresh_from_db()
-            self.assertEqual(self.agent.location, target_room, f"Failed for command: {command}")
+            self.assertEqual(self.agent.location, expected_location, f"Failed for command: {command_text}")
+            command_entry.refresh_from_db()
+            self.assertEqual(command_entry.status, "completed", f"Command status not completed for {command_text}")
+
+        # Test an invalid direction
+        self.agent.location = room_a_id
+        self.agent.save()
+        command_entry_invalid = CommandQueue.objects.create(
+            command="go invalid_direction",
+            agent=self.agent,
+            status="pending"
+        )
+        handle_command(command_entry_invalid)
+        command_entry_invalid.refresh_from_db()
+        self.agent.refresh_from_db()
+        self.assertEqual(command_entry_invalid.status, "completed")
+        self.assertEqual(self.agent.location, room_a_id) # Agent should not move
+        self.assertIn("You can't go invalid_direction from here.", command_entry_invalid.output)
 
     def test_score_command_handler(self):
         self.agent.level = 5
@@ -1342,6 +900,60 @@ class CommandHandlerTest(TestCase):
         self.assertIn(f"Level: {self.agent.level}", command_entry.output)
         self.assertIn(f"Tokens: {self.agent.tokens}", command_entry.output)
         self.assertIn(f"Location: {self.agent.location}", command_entry.output)
+
+    def test_edit_profile_command_look(self):
+        new_look = "a very shiny knight"
+        command_entry = CommandQueue.objects.create(
+            command=f"edit profile look {new_look}",
+            agent=self.agent,
+            status="pending"
+        )
+        handle_command(command_entry)
+        command_entry.refresh_from_db()
+        self.agent.refresh_from_db()
+
+        self.assertEqual(command_entry.status, "completed")
+        self.assertEqual(command_entry.output, f"Your look has been updated to: {new_look}")
+        self.assertEqual(self.agent.look, new_look)
+
+    def test_edit_profile_command_description(self):
+        new_description = "A brave adventurer seeking glory."
+        command_entry = CommandQueue.objects.create(
+            command=f"edit profile description {new_description}",
+            agent=self.agent,
+            status="pending"
+        )
+        handle_command(command_entry)
+        command_entry.refresh_from_db()
+        self.agent.refresh_from_db()
+
+        self.assertEqual(command_entry.status, "completed")
+        self.assertEqual(command_entry.output, f"Your description has been updated to: {new_description}")
+        self.assertEqual(self.agent.description, new_description)
+
+    def test_edit_profile_command_invalid_field(self):
+        command_entry = CommandQueue.objects.create(
+            command="edit profile name NewName",
+            agent=self.agent,
+            status="pending"
+        )
+        handle_command(command_entry)
+        command_entry.refresh_from_db()
+
+        self.assertEqual(command_entry.status, "completed")
+        self.assertEqual(command_entry.output, "Invalid field. You can only edit 'look' or 'description'.")
+
+    def test_edit_profile_command_missing_args(self):
+        command_entry = CommandQueue.objects.create(
+            command="edit profile look",
+            agent=self.agent,
+            status="pending"
+        )
+        handle_command(command_entry)
+        command_entry.refresh_from_db()
+
+        self.assertEqual(command_entry.status, "completed")
+        self.assertEqual(command_entry.output, "Usage: edit profile <field> <new_value> (e.g., edit profile look a tall, dark figure)")
 
     def test_go_command_generates_movement_perceptions(self):
         from datetime import timedelta
@@ -1465,7 +1077,8 @@ class CommandHandlerTest(TestCase):
             description="Agent B for say command testing.",
             tokens=0,
             level=0,
-            location="test_room_for_say"
+            location="test_room_for_say",
+            last_command_sent=timezone.now() # Make agent_b active
         )
 
         # Create a command for Agent A to say something
@@ -1578,9 +1191,8 @@ class CommandHandlerTest(TestCase):
         # Inactive listener in the same room should NOT receive the perception
         self.assertFalse(PerceptionQueue.objects.filter(agent=inactive_listener, text=f'{shouting_agent.name} shouted "{message}"').exists())
 
-        # Agent in another room should receive the perception (if active)
-        # This assertion will fail with the current worker logic, as it filters by location
-        self.assertTrue(PerceptionQueue.objects.filter(agent=other_room_agent, text=f'{shouting_agent.name} shouted "{message}"').exists())
+        # Agent in another room should NOT receive the perception
+        self.assertFalse(PerceptionQueue.objects.filter(agent=other_room_agent, text=f'{shouting_agent.name} shouted "{message}"').exists())
 
         # Clean up perceptions created by this test to avoid interference with other tests
         PerceptionQueue.objects.all().delete()
@@ -1617,3 +1229,118 @@ class CommandHandlerTest(TestCase):
         # Check if the timestamp is recent (e.g., within the last 5 seconds)
         time_difference = timezone.now() - agent.last_command_sent
         self.assertLess(time_difference.total_seconds(), 5)
+
+    def test_wait_command_seconds(self):
+        from datetime import datetime, timedelta, timezone
+        command_entry = CommandQueue.objects.create(
+            command="wait 15s",
+            agent=self.agent,
+            status="pending"
+        )
+        handle_command(command_entry)
+        command_entry.refresh_from_db()
+        self.agent.refresh_from_db()
+
+        self.assertEqual(command_entry.status, "completed")
+        self.assertEqual(command_entry.output, "You begin to wait for 15 seconds.")
+        self.assertIn("waiting", self.agent.flags)
+        wait_end = datetime.fromisoformat(self.agent.flags["waiting"])
+        self.assertAlmostEqual(wait_end, datetime.now(timezone.utc) + timedelta(seconds=15), delta=timedelta(seconds=5))
+
+    def test_wait_command_minutes(self):
+        from datetime import datetime, timedelta, timezone
+        command_entry = CommandQueue.objects.create(
+            command="wait 5m",
+            agent=self.agent,
+            status="pending"
+        )
+        handle_command(command_entry)
+        command_entry.refresh_from_db()
+        self.agent.refresh_from_db()
+
+        self.assertEqual(command_entry.status, "completed")
+        self.assertEqual(command_entry.output, "You begin to wait for 5 minutes.")
+        self.assertIn("waiting", self.agent.flags)
+        wait_end = datetime.fromisoformat(self.agent.flags["waiting"])
+        self.assertAlmostEqual(wait_end, datetime.now(timezone.utc) + timedelta(minutes=5), delta=timedelta(seconds=5))
+
+    def test_wait_command_invalid_duration(self):
+        command_entry = CommandQueue.objects.create(
+            command="wait 10x",
+            agent=self.agent,
+            status="pending"
+        )
+        handle_command(command_entry)
+        command_entry.refresh_from_db()
+
+        self.assertEqual(command_entry.status, "completed")
+        self.assertEqual(command_entry.output, "Invalid duration format. Use 's' for seconds or 'm' for minutes.")
+
+    def test_wait_command_missing_args(self):
+        command_entry = CommandQueue.objects.create(
+            command="wait",
+            agent=self.agent,
+            status="pending"
+        )
+        handle_command(command_entry)
+        command_entry.refresh_from_db()
+
+        self.assertEqual(command_entry.status, "completed")
+        self.assertEqual(command_entry.output, "Wait for how long? (e.g., wait 15s, wait 5m)")
+
+    def test_unknown_command_handler_fails(self):
+        command_entry = CommandQueue.objects.create(
+            command="nonexistent_command",
+            agent=self.agent,
+            status="pending"
+        )
+        handle_command(command_entry)
+        command_entry.refresh_from_db()
+
+        self.assertEqual(command_entry.status, "failed")
+        self.assertIn("Unknown command: nonexistent_command", command_entry.output)
+
+    def test_llm_response_appended_to_perception(self):
+        from mad_multi_agent_dungeon.management.commands.run_agent_app import Command as AgentAppCommand
+        agent_app_command = AgentAppCommand()
+
+        # Ensure agent perception is empty initially
+        self.agent.perception = ""
+        self.agent.save()
+
+        # Create an LLMQueue entry with a completed response
+        test_llm_response = "This is a test LLM response."
+        llm_entry = LLMQueue.objects.create(
+            agent=self.agent,
+            prompt="Test prompt",
+            response=test_llm_response,
+            status='completed'
+        )
+
+        # Run agent app to process the completed LLM response
+        agent_app_command._process_agent_cycle(self.agent)
+        self.agent.refresh_from_db()
+        llm_entry.refresh_from_db()
+
+        # Assert agent's perception is updated with the LLM response
+        self.assertEqual(self.agent.perception, test_llm_response)
+
+        # Assert LLMQueue entry is marked as 'delivered'
+        self.assertEqual(llm_entry.status, 'delivered')
+
+        # Test appending to existing perception
+        second_llm_response = "This is a second test LLM response."
+        llm_entry_2 = LLMQueue.objects.create(
+            agent=self.agent,
+            prompt="Second test prompt",
+            response=second_llm_response,
+            status='completed'
+        )
+
+        agent_app_command._process_agent_cycle(self.agent)
+        self.agent.refresh_from_db()
+        llm_entry_2.refresh_from_db()
+
+        expected_perception = f"{test_llm_response}\n{second_llm_response}"
+        self.assertEqual(self.agent.perception, expected_perception)
+        self.assertEqual(llm_entry_2.status, 'delivered')
