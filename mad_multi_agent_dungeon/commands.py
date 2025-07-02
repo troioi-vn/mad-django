@@ -1,13 +1,36 @@
 import json
 import logging
+from datetime import timedelta
 from pathlib import Path
 
+from django.utils import timezone
+
+from .memory_commands import (
+    memory_append_handler,
+    memory_create_handler,
+    memory_list_handler,
+    memory_load_handler,
+    memory_remove_handler,
+    memory_unload_handler,
+    memory_update_handler,
+)
+from .models import Agent, ObjectInstance, PerceptionQueue
+
 # Load data
-OBJECT_DATA = json.loads(Path('/home/edward/Desktop/mad-django/mad_multi_agent_dungeon/data/objects.json').read_text())
-MAP_DATA = json.loads(Path('/home/edward/Desktop/mad-django/mad_multi_agent_dungeon/data/map.json').read_text())
+OBJECT_DATA = json.loads(
+    Path(
+        "/home/edward/Desktop/mad-django/mad_multi_agent_dungeon/data/objects.json"
+    ).read_text()
+)
+MAP_DATA = json.loads(
+    Path(
+        "/home/edward/Desktop/mad-django/mad_multi_agent_dungeon/data/map.json"
+    ).read_text()
+)
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
 
 def ping_handler(command_entry):
     logger.debug(f"Executing ping for agent {command_entry.agent.name}")
@@ -15,16 +38,12 @@ def ping_handler(command_entry):
     command_entry.status = "completed"
     command_entry.save()
 
-from .models import Agent, ObjectInstance, PerceptionQueue # Added for look_handler and ObjectInstance, and PerceptionQueue for go_handler
-from .memory_commands import memory_create_handler, memory_update_handler, memory_append_handler, memory_remove_handler, memory_list_handler, memory_load_handler, memory_unload_handler
-from django.utils import timezone # Added for is_active check
-from datetime import timedelta # Added for where_handler
 
 def look_handler(command_entry):
     agent = command_entry.agent
     logger.debug(f"Executing look for agent {agent.name} in room {agent.location}")
     room_id = agent.location
-    room_data = MAP_DATA['rooms'].get(room_id)
+    room_data = MAP_DATA["rooms"].get(room_id)
 
     if room_data:
         room_title = room_data.get("title", f"Room {room_id}")
@@ -40,20 +59,25 @@ def look_handler(command_entry):
     output_lines = [f"{room_title}", f"{room_description}"]
     output_lines.append(f"Exits: {available_exits}")
 
-    active_agents = [a.name for a in Agent.objects.filter(location=room_id).exclude(pk=agent.pk) if a.is_active()]
+    active_agents = [
+        a.name
+        for a in Agent.objects.filter(location=room_id).exclude(pk=agent.pk)
+        if a.is_active()
+    ]
     if active_agents:
         output_lines.append(f"Other agents here: {', '.join(active_agents)}")
 
     objects_in_room = ObjectInstance.objects.filter(room_id=room_id)
     if objects_in_room.exists():
-        object_names = ", ".join([obj.data.get("name", obj.object_id) for obj in objects_in_room])
+        object_names = ", ".join(
+            [obj.data.get("name", obj.object_id) for obj in objects_in_room]
+        )
         output_lines.append(f"Objects here: {object_names}")
 
     command_entry.output = "\n".join(output_lines)
     command_entry.status = "completed"
     command_entry.save()
     logger.info(f"Agent {agent.name} looked around in {room_id}.")
-
 
 
 def go_handler(command_entry):
@@ -69,7 +93,7 @@ def go_handler(command_entry):
         return
 
     old_room_id = agent.location
-    current_room_data = MAP_DATA['rooms'].get(old_room_id)
+    current_room_data = MAP_DATA["rooms"].get(old_room_id)
 
     if not current_room_data:
         logger.error(f"Agent {agent.name} in invalid room {old_room_id}")
@@ -81,33 +105,46 @@ def go_handler(command_entry):
     target_room_id = current_room_data.get("exits", {}).get(direction)
 
     if target_room_id:
-        for other_agent in Agent.objects.filter(location=old_room_id).exclude(pk=agent.pk):
+        for other_agent in Agent.objects.filter(location=old_room_id).exclude(
+            pk=agent.pk
+        ):
             if other_agent.is_active():
                 PerceptionQueue.objects.create(
                     agent=other_agent,
                     source_agent=agent,
-                    type='none',
-                    text=f'{agent.name} leaves to the {direction}.'
+                    type="none",
+                    text=f"{agent.name} leaves to the {direction}.",
                 )
-                logger.debug(f"Notified {other_agent.name} of {agent.name}'s departure.")
+                logger.debug(
+                    f"Notified {other_agent.name} of {agent.name}'s departure."
+                )
 
         agent.location = target_room_id
         agent.save()
 
-        opposite_directions = {"north": "south", "south": "north", "east": "west", "west": "east", "up": "down", "down": "up"}
+        opposite_directions = {
+            "north": "south",
+            "south": "north",
+            "east": "west",
+            "west": "east",
+            "up": "down",
+            "down": "up",
+        }
         arrives_from = opposite_directions.get(direction, "somewhere")
 
-        for other_agent in Agent.objects.filter(location=target_room_id).exclude(pk=agent.pk):
+        for other_agent in Agent.objects.filter(location=target_room_id).exclude(
+            pk=agent.pk
+        ):
             if other_agent.is_active():
                 PerceptionQueue.objects.create(
                     agent=other_agent,
                     source_agent=agent,
-                    type='none',
-                    text=f'{agent.name} arrives from the {arrives_from}.'
+                    type="none",
+                    text=f"{agent.name} arrives from the {arrives_from}.",
                 )
                 logger.debug(f"Notified {other_agent.name} of {agent.name}'s arrival.")
 
-        target_room_data = MAP_DATA['rooms'].get(target_room_id)
+        target_room_data = MAP_DATA["rooms"].get(target_room_id)
         if target_room_data:
             exits = target_room_data.get("exits", {})
             available_exits = ", ".join(exits.keys()) if exits else "none"
@@ -118,12 +155,15 @@ def go_handler(command_entry):
         logger.info(f"Agent {agent.name} moved from {old_room_id} to {target_room_id}.")
     else:
         available_exits = ", ".join(current_room_data.get("exits", {}).keys()) or "none"
-        command_entry.output = f"You can't go {direction} from here.\nAvailable exits: {available_exits}"
+        command_entry.output = (
+            f"You can't go {direction} from here.\nAvailable exits: {available_exits}"
+        )
         command_entry.status = "completed"
-        logger.warning(f"Agent {agent.name} failed to move {direction} from {old_room_id}.")
+        logger.warning(
+            f"Agent {agent.name} failed to move {direction} from {old_room_id}."
+        )
 
     command_entry.save()
-
 
 
 def inventory_handler(command_entry):
@@ -136,6 +176,7 @@ def inventory_handler(command_entry):
         command_entry.output = "Your inventory is empty."
     command_entry.status = "completed"
     command_entry.save()
+
 
 def examine_handler(command_entry):
     agent = command_entry.agent
@@ -150,12 +191,17 @@ def examine_handler(command_entry):
         return
 
     current_room_id = agent.location
-    current_room_data = MAP_DATA['rooms'].get(current_room_id)
+    current_room_data = MAP_DATA["rooms"].get(current_room_id)
 
     if current_room_data and "items" in current_room_data:
         for item_id, item_data in current_room_data["items"].items():
-            if item_id.lower() == item_name or item_data.get("title", "").lower() == item_name:
-                command_entry.output = item_data.get("description", "You see nothing special.")
+            if (
+                item_id.lower() == item_name
+                or item_data.get("title", "").lower() == item_name
+            ):
+                command_entry.output = item_data.get(
+                    "description", "You see nothing special."
+                )
                 command_entry.status = "completed"
                 command_entry.save()
                 logger.info(f"Agent {agent.name} examined '{item_name}'.")
@@ -165,16 +211,19 @@ def examine_handler(command_entry):
     command_entry.status = "completed"
     command_entry.save()
 
+
 def where_handler(command_entry):
     agent = command_entry.agent
     logger.debug(f"Executing where for agent {agent.name}")
     room_id = agent.location
-    room_data = MAP_DATA['rooms'].get(room_id, {})
+    room_data = MAP_DATA["rooms"].get(room_id, {})
     room_title = room_data.get("title", f"Room {room_id}")
 
     output_lines = [f"You are in: {room_title} ({room_id})"]
 
-    active_agents = Agent.objects.filter(last_command_sent__gte=timezone.now() - timedelta(minutes=5)).exclude(pk=agent.pk)
+    active_agents = Agent.objects.filter(
+        last_command_sent__gte=timezone.now() - timedelta(minutes=5)
+    ).exclude(pk=agent.pk)
     if active_agents.exists():
         output_lines.append("Active agents in the world:")
         for other_agent in active_agents:
@@ -184,9 +233,14 @@ def where_handler(command_entry):
     command_entry.status = "completed"
     command_entry.save()
 
+
 def shout_handler(command_entry):
     agent = command_entry.agent
-    message = command_entry.command.split(maxsplit=1)[1] if len(command_entry.command.split(maxsplit=1)) > 1 else ""
+    message = (
+        command_entry.command.split(maxsplit=1)[1]
+        if len(command_entry.command.split(maxsplit=1)) > 1
+        else ""
+    )
     logger.debug(f"Executing shout for agent {agent.name}")
     if not message:
         command_entry.output = "Shout what?"
@@ -199,8 +253,10 @@ def shout_handler(command_entry):
     command_entry.status = "completed"
     command_entry.save()
 
+
 def use_handler(command_entry):
     from .models import ObjectInstance
+
     agent = command_entry.agent
     parts = command_entry.command.split(maxsplit=1)
     object_name = parts[1].lower() if len(parts) > 1 else None
@@ -213,7 +269,9 @@ def use_handler(command_entry):
         return
 
     try:
-        obj_instance = ObjectInstance.objects.get(room_id=agent.location, data__name__iexact=object_name)
+        obj_instance = ObjectInstance.objects.get(
+            room_id=agent.location, data__name__iexact=object_name
+        )
         obj = obj_instance.data
         if "use" in obj.get("triggers", {}):
             trigger = obj["triggers"]["use"]
@@ -230,6 +288,7 @@ def use_handler(command_entry):
     command_entry.status = "completed"
     command_entry.save()
 
+
 def help_handler(command_entry):
     logger.debug(f"Executing help for agent {command_entry.agent.name}")
     available_commands = ", ".join(sorted(COMMAND_HANDLERS.keys()))
@@ -237,8 +296,10 @@ def help_handler(command_entry):
     command_entry.status = "completed"
     command_entry.save()
 
+
 def meditate_handler(command_entry):
     from datetime import datetime, timedelta, timezone
+
     agent = command_entry.agent
     parts = command_entry.command.split()
     duration_str = parts[1] if len(parts) > 1 else None
@@ -253,22 +314,24 @@ def meditate_handler(command_entry):
     try:
         value = int(duration_str[:-1])
         unit = duration_str[-1].lower()
-        if unit == 'm':
+        if unit == "m":
             delta = timedelta(minutes=value)
             unit_str = "minutes"
-        elif unit == 'h':
+        elif unit == "h":
             delta = timedelta(hours=value)
             unit_str = "hours"
         else:
             raise ValueError("Invalid time unit")
     except (ValueError, TypeError):
-        command_entry.output = "Invalid duration format. Use 'm' for minutes or 'h' for hours."
+        command_entry.output = (
+            "Invalid duration format. Use 'm' for minutes or 'h' for hours."
+        )
         command_entry.status = "completed"
         command_entry.save()
         return
 
     meditation_end = datetime.now(timezone.utc) + delta
-    agent.flags['meditating'] = meditation_end.isoformat()
+    agent.flags["meditating"] = meditation_end.isoformat()
     agent.save()
 
     command_entry.output = f"You begin to meditate for {value} {unit_str}."
@@ -276,8 +339,10 @@ def meditate_handler(command_entry):
     command_entry.save()
     logger.info(f"Agent {agent.name} started meditating for {value} {unit_str}.")
 
+
 def wait_handler(command_entry):
     from datetime import datetime, timedelta, timezone
+
     agent = command_entry.agent
     parts = command_entry.command.split()
     duration_str = parts[1] if len(parts) > 1 else None
@@ -292,22 +357,24 @@ def wait_handler(command_entry):
     try:
         value = int(duration_str[:-1])
         unit = duration_str[-1].lower()
-        if unit == 's':
+        if unit == "s":
             delta = timedelta(seconds=value)
             unit_str = "seconds"
-        elif unit == 'm':
+        elif unit == "m":
             delta = timedelta(minutes=value)
             unit_str = "minutes"
         else:
             raise ValueError("Invalid time unit")
     except (ValueError, TypeError):
-        command_entry.output = "Invalid duration format. Use 's' for seconds or 'm' for minutes."
+        command_entry.output = (
+            "Invalid duration format. Use 's' for seconds or 'm' for minutes."
+        )
         command_entry.status = "completed"
         command_entry.save()
         return
 
     wait_until = datetime.now(timezone.utc) + delta
-    agent.flags['waiting'] = wait_until.isoformat()
+    agent.flags["waiting"] = wait_until.isoformat()
     agent.save()
 
     command_entry.output = f"You begin to wait for {value} {unit_str}."
@@ -320,7 +387,9 @@ def go_wrapper(direction):
     def handler(command_entry):
         command_entry.command = f"go {direction}"
         go_handler(command_entry)
+
     return handler
+
 
 def score_handler(command_entry):
     agent = command_entry.agent
@@ -329,16 +398,22 @@ def score_handler(command_entry):
         f"Name: {agent.name}",
         f"Level: {agent.level}",
         f"Tokens: {agent.tokens}",
-        f"Location: {agent.location}"
+        f"Location: {agent.location}",
     ]
     command_entry.output = "\n".join(output_lines)
     command_entry.status = "completed"
     command_entry.save()
 
+
 def say_handler(command_entry):
     from .models import Agent, PerceptionQueue
+
     agent = command_entry.agent
-    message = command_entry.command.split(maxsplit=1)[1] if len(command_entry.command.split(maxsplit=1)) > 1 else ""
+    message = (
+        command_entry.command.split(maxsplit=1)[1]
+        if len(command_entry.command.split(maxsplit=1)) > 1
+        else ""
+    )
     logger.debug(f"Executing say for agent {agent.name}")
 
     if not message:
@@ -352,15 +427,18 @@ def say_handler(command_entry):
     command_entry.save()
     logger.info(f"Agent {agent.name} said: '{message}'")
 
-    for other_agent in Agent.objects.filter(location=agent.location).exclude(pk=agent.pk):
+    for other_agent in Agent.objects.filter(location=agent.location).exclude(
+        pk=agent.pk
+    ):
         if other_agent.is_active():
             PerceptionQueue.objects.create(
                 agent=other_agent,
                 source_agent=agent,
-                type='none',
-                text=f'{agent.name} says: "{message}"'
+                type="none",
+                text=f'{agent.name} says: "{message}"',
             )
             logger.debug(f"Notified {other_agent.name} of {agent.name}'s message.")
+
 
 def edit_profile_handler(command_entry):
     agent = command_entry.agent
@@ -376,18 +454,23 @@ def edit_profile_handler(command_entry):
     field = parts[2].lower()
     new_value = parts[3]
 
-    if field in ['look', 'description']:
+    if field in ["look", "description"]:
         setattr(agent, field, new_value)
         agent.save()
         command_entry.output = f"Your {field} has been updated to: {new_value}"
         command_entry.status = "completed"
         logger.info(f"Agent {agent.name} updated their {field}.")
     else:
-        command_entry.output = "Invalid field. You can only edit 'look' or 'description'."
+        command_entry.output = (
+            "Invalid field. You can only edit 'look' or 'description'."
+        )
         command_entry.status = "completed"
-        logger.warning(f"Agent {agent.name} failed to update invalid profile field '{field}'.")
-    
+        logger.warning(
+            f"Agent {agent.name} failed to update invalid profile field '{field}'."
+        )
+
     command_entry.save()
+
 
 COMMAND_HANDLERS = {
     "ping": ping_handler,
@@ -399,7 +482,6 @@ COMMAND_HANDLERS = {
     "shout": shout_handler,
     "use": use_handler,
     "help": help_handler,
-    "commands": help_handler,
     "meditate": meditate_handler,
     "wait": wait_handler,
     "north": go_wrapper("north"),
@@ -427,8 +509,10 @@ COMMAND_HANDLERS = {
     "edit": edit_profile_handler,
 }
 
+
 def handle_command(command_entry):
     from django.utils import timezone
+
     agent = command_entry.agent
     agent.last_command_sent = timezone.now()
     agent.save()
@@ -436,15 +520,17 @@ def handle_command(command_entry):
     command_parts = command_entry.command.split()
     base_command = command_parts[0] if command_parts else ""
     handler = COMMAND_HANDLERS.get(base_command)
-    
+
     logger.info(f"Handling command '{command_entry.command}' for agent {agent.name}")
-    
+
     if handler:
         try:
             handler(command_entry)
             logger.info(f"Successfully handled '{base_command}' for agent {agent.name}")
         except Exception as e:
-            logger.exception(f"Error executing handler for command '{base_command}' for agent {agent.name}")
+            logger.exception(
+                f"Error executing handler for command '{base_command}' for agent {agent.name}"
+            )
             command_entry.output = f"An error occurred: {e}"
             command_entry.status = "failed"
             command_entry.save()
@@ -453,4 +539,3 @@ def handle_command(command_entry):
         command_entry.output = f"Unknown command: {command_entry.command}"
         command_entry.status = "failed"
         command_entry.save()
-

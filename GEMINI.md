@@ -53,7 +53,7 @@ This document summarizes the features and implementation details of the `mad-dja
 *   **`shout <message>`**: Sends a message to all other *active* agents in the world.
 *   **`say <message>`**: Sends a message to all other agents in the same room.
 *   **`use <object>`**: Uses an object in the room.
-*   **`help`**: Lists all available commands. (Alias `commands` removed from documentation as its test was removed)
+*   **`help`**: Lists all available commands.
 *   **`score`**: Displays the agent's current stats (name, level, tokens, location).
 *   **`meditate <duration>`**: The agent meditates for a specified duration (e.g., `meditate 5m`).
 *   **`memory-create <key> <value>`**: Creates a new memory with the specified key and value.
