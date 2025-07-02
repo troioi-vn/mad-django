@@ -14,10 +14,13 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+
 from django.urls import path, include
 from mad_multi_agent_dungeon.admin import admin_site
+from django.http import HttpResponse
 
 urlpatterns = [
-    path('admin/', admin_site.urls),
-    path('', include('mad_multi_agent_dungeon.urls')),
+    path("admin/", admin_site.urls),
+    path("", include("mad_multi_agent_dungeon.urls")),
+    path("favicon.ico", lambda request: HttpResponse(status=204)),
 ]

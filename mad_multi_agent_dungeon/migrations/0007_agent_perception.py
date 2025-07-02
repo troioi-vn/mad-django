@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('mad_multi_agent_dungeon', '0006_agent_prompt'),
+        ("mad_multi_agent_dungeon", "0006_agent_prompt"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='agent',
-            name='perception',
+            model_name="agent",
+            name="perception",
             field=models.TextField(blank=True, null=True),
         ),
     ]

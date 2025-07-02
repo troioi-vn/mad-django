@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('mad_multi_agent_dungeon', '0011_alter_llmqueue_status'),
+        ("mad_multi_agent_dungeon", "0011_alter_llmqueue_status"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='agent',
-            name='is_running',
+            model_name="agent",
+            name="is_running",
             field=models.BooleanField(default=True),
         ),
     ]

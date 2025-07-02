@@ -1,5 +1,5 @@
-from .models import Agent, Memory, CommandQueue
-from django.utils import timezone
+from .models import Memory
+
 
 def memory_create_handler(command_entry):
     agent = command_entry.agent
@@ -12,7 +12,7 @@ def memory_create_handler(command_entry):
 
     key = parts[1]
     value = parts[2]
-    
+
     try:
         Memory.objects.create(agent=agent, key=key, value=value)
         command_entry.output = f"Memory '{key}' created successfully."
@@ -21,6 +21,7 @@ def memory_create_handler(command_entry):
         command_entry.output = f"Error creating memory: {e}"
         command_entry.status = "failed"
     command_entry.save()
+
 
 def memory_update_handler(command_entry):
     agent = command_entry.agent
@@ -33,7 +34,7 @@ def memory_update_handler(command_entry):
 
     key = parts[1]
     new_value = parts[2]
-    
+
     try:
         memory = Memory.objects.get(agent=agent, key=key)
         memory.value = new_value
@@ -48,6 +49,7 @@ def memory_update_handler(command_entry):
         command_entry.status = "failed"
     command_entry.save()
 
+
 def memory_append_handler(command_entry):
     agent = command_entry.agent
     parts = command_entry.command.split(maxsplit=2)
@@ -59,7 +61,7 @@ def memory_append_handler(command_entry):
 
     key = parts[1]
     text_to_append = parts[2]
-    
+
     try:
         memory = Memory.objects.get(agent=agent, key=key)
         memory.value += " " + text_to_append
@@ -74,6 +76,7 @@ def memory_append_handler(command_entry):
         command_entry.status = "failed"
     command_entry.save()
 
+
 def memory_remove_handler(command_entry):
     agent = command_entry.agent
     parts = command_entry.command.split(maxsplit=1)
@@ -84,7 +87,7 @@ def memory_remove_handler(command_entry):
         return
 
     key = parts[1]
-    
+
     try:
         memory = Memory.objects.get(agent=agent, key=key)
         memory.delete()
@@ -98,9 +101,10 @@ def memory_remove_handler(command_entry):
         command_entry.status = "failed"
     command_entry.save()
 
+
 def memory_list_handler(command_entry):
     agent = command_entry.agent
-    memories = Memory.objects.filter(agent=agent).order_by('key')
+    memories = Memory.objects.filter(agent=agent).order_by("key")
     if memories.exists():
         output_lines = ["Your memories:"]
         for mem in memories:
@@ -110,6 +114,7 @@ def memory_list_handler(command_entry):
         command_entry.output = "You have no memories."
     command_entry.status = "completed"
     command_entry.save()
+
 
 def memory_load_handler(command_entry):
     agent = command_entry.agent
@@ -139,6 +144,7 @@ def memory_load_handler(command_entry):
         command_entry.status = "failed"
     command_entry.save()
 
+
 def memory_unload_handler(command_entry):
     agent = command_entry.agent
     parts = command_entry.command.split(maxsplit=1)
@@ -166,4 +172,3 @@ def memory_unload_handler(command_entry):
         command_entry.output = f"Error unloading memory: {e}"
         command_entry.status = "failed"
     command_entry.save()
-

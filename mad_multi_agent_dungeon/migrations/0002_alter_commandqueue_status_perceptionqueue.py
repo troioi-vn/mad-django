@@ -7,25 +7,63 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('mad_multi_agent_dungeon', '0001_initial'),
+        ("mad_multi_agent_dungeon", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='commandqueue',
-            name='status',
-            field=models.CharField(choices=[('pending', 'Pending'), ('processing', 'Processing'), ('completed', 'Completed'), ('failed', 'Failed')], default='pending', max_length=20),
+            model_name="commandqueue",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("pending", "Pending"),
+                    ("processing", "Processing"),
+                    ("completed", "Completed"),
+                    ("failed", "Failed"),
+                ],
+                default="pending",
+                max_length=20,
+            ),
         ),
         migrations.CreateModel(
-            name='PerceptionQueue',
+            name="PerceptionQueue",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('type', models.CharField(choices=[('command', 'Command'), ('none', 'None')], default='none', max_length=20)),
-                ('text', models.TextField()),
-                ('delivered', models.BooleanField(default=False)),
-                ('date', models.DateTimeField(auto_now_add=True)),
-                ('agent', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='mad_multi_agent_dungeon.agent')),
-                ('command', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='mad_multi_agent_dungeon.commandqueue')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "type",
+                    models.CharField(
+                        choices=[("command", "Command"), ("none", "None")],
+                        default="none",
+                        max_length=20,
+                    ),
+                ),
+                ("text", models.TextField()),
+                ("delivered", models.BooleanField(default=False)),
+                ("date", models.DateTimeField(auto_now_add=True)),
+                (
+                    "agent",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="mad_multi_agent_dungeon.agent",
+                    ),
+                ),
+                (
+                    "command",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="mad_multi_agent_dungeon.commandqueue",
+                    ),
+                ),
             ],
         ),
     ]

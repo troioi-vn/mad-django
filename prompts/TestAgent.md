@@ -1,1 +1,0 @@
-This is the prompt for agent TestAgent.

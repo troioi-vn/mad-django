@@ -37,6 +37,7 @@
         .tab-content { display: none; padding: 1em; border: 1px solid #ccc; border-top: none; }
         .tab-content.active { display: block; }
         #perceptions li { white-space: pre-wrap; }
+        #base_prompt_content, #loaded_memories_content, #perception_content { white-space: pre-wrap; }
     </style>
 </head>
 <body>
@@ -79,6 +80,14 @@
                 <p>
                     <label for="id_command">Command:</label>
                     <input type="text" name="command" size="25" required id="id_command">
+                </p>
+                <button type="submit">Send</button>
+            </form>
+            <form method="post" action="{% url 'submit_llm_response' agent.name %}" style="display: flex; align-items: center; gap: 1em; margin-top: 1em;">
+                {% csrf_token %}
+                <p>
+                    <label for="id_llm_response">LLM Response:</label>
+                    <input type="text" name="llm_response" size="25" required id="id_llm_response">
                 </p>
                 <button type="submit">Send</button>
             </form>

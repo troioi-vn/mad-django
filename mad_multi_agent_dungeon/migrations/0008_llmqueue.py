@@ -7,20 +7,46 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('mad_multi_agent_dungeon', '0007_agent_perception'),
+        ("mad_multi_agent_dungeon", "0007_agent_perception"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='LLMQueue',
+            name="LLMQueue",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('prompt', models.TextField()),
-                ('yield_value', models.IntegerField(default=0)),
-                ('status', models.CharField(choices=[('pending', 'Pending'), ('thinking', 'Thinking'), ('completed', 'Completed'), ('failed', 'Failed')], default='pending', max_length=20)),
-                ('response', models.TextField(blank=True, null=True)),
-                ('date', models.DateTimeField(auto_now_add=True)),
-                ('agent', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='mad_multi_agent_dungeon.agent')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("prompt", models.TextField()),
+                ("yield_value", models.IntegerField(default=0)),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Pending"),
+                            ("thinking", "Thinking"),
+                            ("completed", "Completed"),
+                            ("failed", "Failed"),
+                        ],
+                        default="pending",
+                        max_length=20,
+                    ),
+                ),
+                ("response", models.TextField(blank=True, null=True)),
+                ("date", models.DateTimeField(auto_now_add=True)),
+                (
+                    "agent",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="mad_multi_agent_dungeon.agent",
+                    ),
+                ),
             ],
         ),
     ]

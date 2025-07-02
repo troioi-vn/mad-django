@@ -7,18 +7,28 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('mad_multi_agent_dungeon', '0002_alter_commandqueue_status_perceptionqueue'),
+        ("mad_multi_agent_dungeon", "0002_alter_commandqueue_status_perceptionqueue"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='perceptionqueue',
-            name='source_agent',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='perceptions_from', to='mad_multi_agent_dungeon.agent'),
+            model_name="perceptionqueue",
+            name="source_agent",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="perceptions_from",
+                to="mad_multi_agent_dungeon.agent",
+            ),
         ),
         migrations.AlterField(
-            model_name='perceptionqueue',
-            name='agent',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='perceptions_for', to='mad_multi_agent_dungeon.agent'),
+            model_name="perceptionqueue",
+            name="agent",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="perceptions_for",
+                to="mad_multi_agent_dungeon.agent",
+            ),
         ),
     ]

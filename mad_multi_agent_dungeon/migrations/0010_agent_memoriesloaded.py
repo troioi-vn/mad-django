@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('mad_multi_agent_dungeon', '0009_memory_delete_agentmemory'),
+        ("mad_multi_agent_dungeon", "0009_memory_delete_agentmemory"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='agent',
-            name='memoriesLoaded',
+            model_name="agent",
+            name="memoriesLoaded",
             field=models.JSONField(blank=True, default=list, null=True),
         ),
     ]

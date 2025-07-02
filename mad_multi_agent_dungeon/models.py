@@ -1,5 +1,6 @@
 from django.db import models
 
+
 class Agent(models.Model):
     name = models.CharField(max_length=255, unique=True)
     look = models.CharField(max_length=255)
@@ -11,14 +12,14 @@ class Agent(models.Model):
     location = models.CharField(max_length=255, default="start_room")
     last_command_sent = models.DateTimeField(null=True, blank=True)
     last_retrieved = models.DateTimeField(null=True, blank=True)
-    
+
     PHASE_CHOICES = [
-        ('thinking', 'Thinking'),
-        ('acting', 'Acting'),
-        ('prompting', 'Prompting'),
-        ('idle', 'Idle'), # Default phase
+        ("thinking", "Thinking"),
+        ("acting", "Acting"),
+        ("prompting", "Prompting"),
+        ("idle", "Idle"),  # Default phase
     ]
-    phase = models.CharField(max_length=20, choices=PHASE_CHOICES, default='idle')
+    phase = models.CharField(max_length=20, choices=PHASE_CHOICES, default="idle")
     prompt = models.TextField(blank=True, null=True)
     perception = models.TextField(blank=True, null=True)
     memoriesLoaded = models.JSONField(default=list, blank=True, null=True)
@@ -30,8 +31,12 @@ class Agent(models.Model):
     def is_active(self):
         if self.last_command_sent:
             from django.utils import timezone
-            return (timezone.now() - self.last_command_sent).total_seconds() < 300 # 5 minutes * 60 seconds
+
+            return (
+                timezone.now() - self.last_command_sent
+            ).total_seconds() < 300  # 5 minutes * 60 seconds
         return False
+
 
 class ObjectInstance(models.Model):
     object_id = models.CharField(max_length=255)
@@ -41,31 +46,43 @@ class ObjectInstance(models.Model):
     def __str__(self):
         return f"{self.object_id} in {self.room_id}"
 
+
 class CommandQueue(models.Model):
     command = models.CharField(max_length=1024)
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('processing', 'Processing'),
-        ('completed', 'Completed'),
-        ('failed', 'Failed'),
+        ("pending", "Pending"),
+        ("processing", "Processing"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
     ]
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     date = models.DateTimeField(auto_now_add=True)
     output = models.TextField(blank=True)
 
     def __str__(self):
         return f"{self.command} for {self.agent.name} - {self.status}"
 
+
 class PerceptionQueue(models.Model):
-    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='perceptions_for')
-    source_agent = models.ForeignKey(Agent, on_delete=models.CASCADE, null=True, blank=True, related_name='perceptions_from')
+    agent = models.ForeignKey(
+        Agent, on_delete=models.CASCADE, related_name="perceptions_for"
+    )
+    source_agent = models.ForeignKey(
+        Agent,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="perceptions_from",
+    )
     TYPE_CHOICES = [
-        ('command', 'Command'),
-        ('none', 'None'),
+        ("command", "Command"),
+        ("none", "None"),
     ]
-    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='none')
-    command = models.ForeignKey(CommandQueue, on_delete=models.CASCADE, null=True, blank=True)
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="none")
+    command = models.ForeignKey(
+        CommandQueue, on_delete=models.CASCADE, null=True, blank=True
+    )
     text = models.TextField()
     delivered = models.BooleanField(default=False)
     date = models.DateTimeField(auto_now_add=True)
@@ -73,29 +90,31 @@ class PerceptionQueue(models.Model):
     def __str__(self):
         return f"Perception for {self.agent.name} - {self.type}"
 
+
 class Memory(models.Model):
-    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='memories')
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="memories")
     key = models.CharField(max_length=255)
     value = models.TextField()
 
     class Meta:
-        unique_together = ('agent', 'key') # Ensure unique key per agent
+        unique_together = ("agent", "key")  # Ensure unique key per agent
 
     def __str__(self):
         return f"Memory for {self.agent.name}: {self.key}"
+
 
 class LLMQueue(models.Model):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
     prompt = models.TextField()
     yield_value = models.IntegerField(default=0)
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('thinking', 'Thinking'),
-        ('completed', 'Completed'),
-        ('failed', 'Failed'),
-        ('delivered', 'Delivered'),
+        ("pending", "Pending"),
+        ("thinking", "Thinking"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+        ("delivered", "Delivered"),
     ]
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     response = models.TextField(blank=True, null=True)
     date = models.DateTimeField(auto_now_add=True)
 

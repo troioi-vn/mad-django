@@ -6,13 +6,23 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('mad_multi_agent_dungeon', '0010_agent_memoriesloaded'),
+        ("mad_multi_agent_dungeon", "0010_agent_memoriesloaded"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='llmqueue',
-            name='status',
-            field=models.CharField(choices=[('pending', 'Pending'), ('thinking', 'Thinking'), ('completed', 'Completed'), ('failed', 'Failed'), ('delivered', 'Delivered')], default='pending', max_length=20),
+            model_name="llmqueue",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("pending", "Pending"),
+                    ("thinking", "Thinking"),
+                    ("completed", "Completed"),
+                    ("failed", "Failed"),
+                    ("delivered", "Delivered"),
+                ],
+                default="pending",
+                max_length=20,
+            ),
         ),
     ]

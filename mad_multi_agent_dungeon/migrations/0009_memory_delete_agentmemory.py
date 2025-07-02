@@ -7,23 +7,38 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('mad_multi_agent_dungeon', '0008_llmqueue'),
+        ("mad_multi_agent_dungeon", "0008_llmqueue"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Memory',
+            name="Memory",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('key', models.CharField(max_length=255)),
-                ('value', models.TextField()),
-                ('agent', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='memories', to='mad_multi_agent_dungeon.agent')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("key", models.CharField(max_length=255)),
+                ("value", models.TextField()),
+                (
+                    "agent",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="memories",
+                        to="mad_multi_agent_dungeon.agent",
+                    ),
+                ),
             ],
             options={
-                'unique_together': {('agent', 'key')},
+                "unique_together": {("agent", "key")},
             },
         ),
         migrations.DeleteModel(
-            name='AgentMemory',
+            name="AgentMemory",
         ),
     ]
