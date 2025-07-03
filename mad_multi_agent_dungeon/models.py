@@ -120,3 +120,16 @@ class LLMQueue(models.Model):
 
     def __str__(self):
         return f"LLM Prompt for {self.agent.name} - {self.status}"
+
+
+class LLMAPIKey(models.Model):
+    key = models.CharField(max_length=255, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used = models.DateTimeField(auto_now=True)
+    description = models.TextField(blank=True, null=True)
+    usage_count = models.IntegerField(default=0)
+    parameters = models.JSONField(default=dict, blank=True, null=True)
+
+    def __str__(self):
+        return f"API Key: {self.key[:10]}... (Active: {self.is_active})"

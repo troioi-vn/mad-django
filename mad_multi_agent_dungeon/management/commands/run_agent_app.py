@@ -5,7 +5,10 @@ from mad_multi_agent_dungeon.models import (
     PerceptionQueue,
     CommandQueue,
     LLMQueue,
+    LLMAPIKey,
 )
+from mad_multi_agent_dungeon.llm_api import call_gemini_api
+
 from django.utils import timezone
 from datetime import datetime
 import time
@@ -74,10 +77,39 @@ class Command(BaseCommand):
             )
 
     def _process_llm_queue(self):
-        # This method is now empty as LLM responses are submitted manually
-        pass
+        pending_llm_requests = LLMQueue.objects.filter(status="pending")
+        for llm_request in pending_llm_requests:
+            logger.info(f"Processing pending LLM request {llm_request.id} for agent {llm_request.agent.name}")
+            llm_request.status = "thinking"
+            llm_request.save()
+
+            api_key_obj = LLMAPIKey.objects.filter(is_active=True).first()
+            if not api_key_obj:
+                logger.error("No active LLM API key found. Marking LLM request as failed.")
+                print("DEBUG: No active LLM API key found in _process_llm_queue") # Debug print
+                llm_request.status = "failed"
+                llm_request.response = "Error: No active API key found."
+                llm_request.save()
+                continue
+
+            try:
+                response_text = call_gemini_api(
+                    llm_request.prompt, api_key_obj.key, api_key_obj.parameters
+                )
+                llm_request.response = response_text
+                llm_request.status = "completed"
+                api_key_obj.last_used = timezone.now()
+                api_key_obj.usage_count += 1
+                api_key_obj.save()
+                logger.info(f"LLM request {llm_request.id} completed for agent {llm_request.agent.name}.")
+            except Exception as e:
+                logger.error(f"Error calling LLM API for request {llm_request.id}: {e}")
+                llm_request.response = f"Error: {e}"
+                llm_request.status = "failed"
+            llm_request.save()
 
     def _process_agent_cycle(self, agent):
+        agent.perception = agent.perception or "" # Ensure perception is a string
         if not agent.is_running:
             return  # Skip processing if the agent is not running
         # Get undelivered perceptions for the agent
@@ -91,60 +123,6 @@ class Command(BaseCommand):
                 logger.info(
                     f"Processing perception {perception.id} for agent '{agent.name}'."
                 )
-
-                # Check for commands in the perception text
-                command_pattern = r"\[command\|(.*?)\]"
-                memory_load_pattern = r"\[memory\|load\|(.*?)\]"
-                command_match = re.search(command_pattern, perception.text)
-                memory_load_match = re.search(memory_load_pattern, perception.text)
-
-                if command_match:
-                    command_content = command_match.group(1)
-                    logger.debug(
-                        f"Found command '{command_content}' in perception {perception.id}."
-                    )
-
-                    # Add to CommandQueue
-                    CommandQueue.objects.create(
-                        agent=agent, command=command_content.replace("|", " ", 1)
-                    )
-                    logger.info(
-                        f"Queued command '{command_content.replace('|', ' ', 1)}' for agent '{agent.name}'."
-                    )
-
-                    # Mark perception as sent
-                    perception.text = re.sub(
-                        command_pattern,
-                        f"[command|{command_content}]sent",
-                        perception.text,
-                    )
-                    logger.debug(
-                        f"Marked command '{command_content}' as 'sent' in perception {perception.id}."
-                    )
-
-                elif memory_load_match:
-                    memory_key = memory_load_match.group(1)
-                    logger.debug(
-                        f"Found memory load command '{memory_key}' in perception {perception.id}."
-                    )
-
-                    # Add to CommandQueue as a memory-load command
-                    CommandQueue.objects.create(
-                        agent=agent, command=f"memory-load {memory_key}"
-                    )
-                    logger.info(
-                        f"Queued memory-load command 'memory-load {memory_key}' for agent '{agent.name}'."
-                    )
-
-                    # Mark perception as sent
-                    perception.text = re.sub(
-                        memory_load_pattern,
-                        f"[memory|load|{memory_key}]sent",
-                        perception.text,
-                    )
-                    logger.debug(
-                        f"Marked memory load command '{memory_key}' as 'sent' in perception {perception.id}."
-                    )
 
                 processed_perception_texts.append(perception.text)
                 perception.delivered = True  # Mark as delivered
@@ -182,92 +160,65 @@ class Command(BaseCommand):
         )
         if llm_entry:
             logger.info(
-                f"Processing completed LLM response {llm_entry.id} for agent '{agent.name}'."
+                f"Processing completed LLM response {llm_entry.id} for agent '{agent.name}'. (Status: {llm_entry.status})"
             )
+            print(f"DEBUG: Agent {agent.name} perception BEFORE update: '{agent.perception}'") # DEBUG
+            # Process embedded commands from LLM response
+            original_llm_response = llm_entry.response
+            llm_command_pattern = r"\[command\|(.+?)\]"
+            llm_memory_load_pattern = r"\[memory\|load\|(.+?)\]"
+            llm_memory_create_pattern = r"\[memory\|create\|(.+?)\]"
 
-            # Process embedded commands from LLM response and mark as sent in the response itself
-            llm_command_pattern = r"\[command\|(.*?)\]"
-            llm_memory_load_pattern = r"\[memory\|load\|(.*?)\]"
-
-            modified_llm_response = llm_entry.response
-
-            # Loop to find and replace all command and memory patterns
-            while True:
-                llm_command_match = re.search(
-                    llm_command_pattern, modified_llm_response
-                )
-                llm_memory_load_match = re.search(
-                    llm_memory_load_pattern, modified_llm_response
-                )
-                llm_memory_create_match = re.search(
-                    r"\[memory\|create\|(.*?)\]", modified_llm_response
-                )
-
-                if llm_command_match:
-                    match = llm_command_match
-                    content = match.group(1)
-                    command_parts = content.split("|")
-                    command_name = command_parts[0]
-                    command_args = " ".join(command_parts[1:])
-                    command_to_queue = f"{command_name} {command_args}".strip()
-                    replacement_text = f"processed_command_{content.replace('|', '_')}"
-                    logger.debug(
-                        f"Found command '{content}' in LLM response {llm_entry.id}."
-                    )
-                elif llm_memory_load_match:
-                    match = llm_memory_load_match
-
-                    content = match.group(1)
-                    command_to_queue = f"memory-load {content}"
-                    replacement_text = f"processed_memory_load_{content}"
-                    logger.debug(
-                        f"Found memory load command '{content}' in LLM response {llm_entry.id}."
-                    )
-                elif llm_memory_create_match:
-                    match = llm_memory_create_match
-                    content = match.group(1)
-                    command_to_queue = f"memory-create {content.replace('|', ' ', 1)}"
-                    replacement_text = (
-                        f"processed_memory_create_{content.replace('|', '_')}"
-                    )
-                    logger.debug(
-                        f"Found memory create command '{content}' in LLM response {llm_entry.id}."
-                    )
-                else:
-                    break  # No more patterns found
-
-                # Add to CommandQueue
+            # Process regular commands
+            for match in re.finditer(llm_command_pattern, original_llm_response):
+                command_content = match.group(1)
+                command_parts = command_content.split("|")
+                command_name = command_parts[0]
+                command_args = " ".join(command_parts[1:])
+                command_to_queue = f"{command_name} {command_args}".strip()
                 CommandQueue.objects.create(agent=agent, command=command_to_queue)
                 logger.info(
                     f"Queued command '{command_to_queue}' from LLM response for agent '{agent.name}'."
                 )
 
-                # Replace the found pattern
-                start_index = match.start()
-                end_index = match.end()
-                modified_llm_response = (
-                    modified_llm_response[:start_index]
-                    + replacement_text
-                    + modified_llm_response[end_index:]
+            # Process memory-load commands
+            for match in re.finditer(llm_memory_load_pattern, original_llm_response):
+                memory_key = match.group(1)
+                command_to_queue = f"memory-load {memory_key}"
+                CommandQueue.objects.create(agent=agent, command=command_to_queue)
+                logger.info(
+                    f"Queued command '{command_to_queue}' from LLM response for agent '{agent.name}'."
                 )
-                logger.debug("Marked command as 'sent' in LLM response.")
 
-            # Append modified LLM response to agent's perception field
+            # Process memory-create commands
+            for match in re.finditer(llm_memory_create_pattern, original_llm_response):
+                content = match.group(1)
+                parts = content.split("|")
+                if len(parts) >= 2:
+                    memory_key = parts[0]
+                    memory_value = "|".join(parts[1:])
+                    command_to_queue = f"memory-create {memory_key} {memory_value}"
+                    CommandQueue.objects.create(agent=agent, command=command_to_queue)
+                    logger.info(
+                        f"Queued command '{command_to_queue}' from LLM response for agent '{agent.name}'."
+                    )
+
+            # Append original LLM response to agent's perception field
+            # Truncate original_llm_response to make space for "LLM: " prefix
+            truncated_llm_response = original_llm_response[-4995:]
+            prefixed_llm_response = "LLM: " + truncated_llm_response
+
             if agent.perception:
-                agent.perception += (
-                    "\nLLM: "
-                    + modified_llm_response
-                )
+                agent.perception += "\n" + prefixed_llm_response
             else:
-                agent.perception = "LLM: " + modified_llm_response
+                agent.perception = prefixed_llm_response
             agent.perception = agent.perception[
                 -5000:
             ]  # Keep only the last 5000 characters
             agent.save()
             logger.debug(f"Agent '{agent.name}' perception updated with LLM response.")
+            print(f"DEBUG: Agent {agent.name} perception AFTER update: '{agent.perception}'") # DEBUG
 
-            # Update the LLM response with the modified version to prevent re-processing
-            llm_entry.response = modified_llm_response
             # Mark LLMQueue entry as delivered
             llm_entry.status = "delivered"
             llm_entry.save()
@@ -282,6 +233,8 @@ class Command(BaseCommand):
             logger.info(f"Agent '{agent.name}' phase changed to 'acting'.")
 
             return  # Processed a completed LLM, so return for next cycle to allow commands to be processed
+
+        print(f"DEBUG: No completed LLM entry found for agent {agent.name} or already delivered.") # DEBUG
 
         # If no completed LLM entry was found, or if we just processed one and are now in 'acting' phase,
         # determine next action based on current LLM queue status.
@@ -312,16 +265,17 @@ class Command(BaseCommand):
         from mad_multi_agent_dungeon.models import Memory
 
         loaded_memories_values = []
-        for mem_id in agent.memoriesLoaded:
-            try:
-                memory = Memory.objects.get(id=mem_id)
-                loaded_memories_values.append(memory.value)
-            except Memory.DoesNotExist:
-                logger.warning(
-                    self.style.WARNING(
-                        f"Warning: Loaded memory ID {mem_id} not found for agent '{agent.name}'."
+        if agent.memoriesLoaded:  # Check if memoriesLoaded is not None
+            for mem_id in agent.memoriesLoaded:
+                try:
+                    memory = Memory.objects.get(id=mem_id)
+                    loaded_memories_values.append(memory.value)
+                except Memory.DoesNotExist:
+                    logger.warning(
+                        self.style.WARNING(
+                            f"Warning: Loaded memory ID {mem_id} not found for agent '{agent.name}'."
+                        )
                     )
-                )
         # Gemini do not touch this block of code please
         if loaded_memories_values:
             llm_prompt_parts.append(
@@ -331,14 +285,20 @@ class Command(BaseCommand):
             llm_prompt_parts.append("# Perception\n" + agent.perception)
         final_llm_prompt = "\n".join(llm_prompt_parts)
 
+        if not agent.is_running:
+            logger.info(f"Agent '{agent.name}' is not running. Halting for inspection. Prompt that would have been sent:\n{final_llm_prompt}")
+            time.sleep(5) # Sleep to prevent rapid logging
+            return # Skip processing if the agent is not running
+
         # Create LLMQueue entry
         LLMQueue.objects.create(agent=agent, prompt=final_llm_prompt)
         logger.info(f"New LLM request created for agent '{agent.name}'.")
 
         # Set agent phase to thinking
         agent.phase = "thinking"
+        agent.is_running = False # Pause the agent after creating an LLM request
         agent.save()
-        logger.debug(f"Agent '{agent.name}' phase changed to 'thinking'.")
+        logger.debug(f"Agent '{agent.name}' phase changed to 'thinking' and is_running set to False.")
 
         # Check if the agent is waiting
         if "waiting" in agent.flags and agent.flags["waiting"]:

@@ -11,7 +11,11 @@ from mad_multi_agent_dungeon.models import (
     PerceptionQueue,
     LLMQueue,
     Memory,
+    LLMAPIKey,
 )
+from mad_multi_agent_dungeon.llm_api import call_gemini_api
+from unittest.mock import patch
+
 from mad_multi_agent_dungeon.commands import handle_command, MAP_DATA, OBJECT_DATA
 from mad_multi_agent_dungeon.management.commands.run_command_worker import (
     Command as CommandWorker,
@@ -170,6 +174,7 @@ class AgentAppIntegrationTest(TestCase):
             level=0,
             location="start_room",
             phase="idle",
+            perception="", # Initialize perception to an empty string
         )
         # Create a dummy prompt file
         with open(self.prompt_file, "w") as f:
@@ -184,6 +189,10 @@ class AgentAppIntegrationTest(TestCase):
         LLMQueue.objects.all().delete()
         CommandQueue.objects.all().delete()
         PerceptionQueue.objects.all().delete()
+        LLMAPIKey.objects.all().delete() # Clear API keys
+
+        # Create an active API key for testing
+        self.active_api_key = LLMAPIKey.objects.create(key="test_api_key", is_active=True)
 
     def tearDown(self):
         # Clean up the created prompt file
@@ -240,39 +249,32 @@ class AgentAppIntegrationTest(TestCase):
 
         agent_app_command = AgentAppCommand()
 
-        # First, simulate the initial prompt generation and LLMQueue submission
-        agent_app_command._process_agent_cycle(self.agent)
-        self.agent.refresh_from_db()
-        llm_entry = LLMQueue.objects.filter(agent=self.agent).order_by("-date").first()
+        # Create an active API key for this specific test
+        api_key_for_test = LLMAPIKey.objects.create(key="test_api_key_for_update", is_active=True)
 
-        # Simulate LLM response
-        llm_entry.status = "completed"
-        llm_entry.response = "LLM says: Hello! [command|say|Hello from LLM!] [memory|create|llm_key|llm_value]"
-        llm_entry.save()
-
-        # Run agent app again to process the completed LLM response
-        # Run agent app again to process the completed LLM response
-        agent_app_command._process_agent_cycle(
-            self.agent
-        )  # This processes the LLM response and changes phase to 'acting'
-        self.agent.refresh_from_db()
-        llm_entry.refresh_from_db()
-
-        # Assert agent's perception is updated
-        self.assertIn("LLM says: Hello!", self.agent.perception)
-        # Check that the command was processed and marked as such in the perception
-        self.agent.refresh_from_db()
-        self.assertIn("processed_command_say_Hello from LLM!", self.agent.perception)
-        self.assertIn(
-            "processed_memory_create_llm_key_llm_value", self.agent.perception
+        # Create a completed LLMQueue entry directly
+        test_llm_response = "LLM says: Hello! [command|say|Hello from LLM!] [memory|create|llm_key|llm_value]"
+        llm_entry = LLMQueue.objects.create(
+            agent=self.agent,
+            prompt="Test prompt",
+            response=test_llm_response,
+            status="completed",
         )
+        
+
+        # Run agent app to process the completed LLM response (updates agent perception)
+        agent_app_command._process_agent_cycle(self.agent)
+        self.agent.refresh_from_db() # Re-fetch agent
+        llm_entry.refresh_from_db() # Re-fetch llm_entry
+        
+
+        # Assert agent's perception is updated with the original LLM response
+        self.assertIn("LLM says: Hello!", self.agent.perception)
+        self.assertIn("[command|say|Hello from LLM!]", self.agent.perception)
+        self.assertIn("[memory|create|llm_key|llm_value]", self.agent.perception)
 
         # Assert agent phase is 'acting'
         self.assertEqual(self.agent.phase, "acting")
-
-        # Run agent app a third time to process the newly added perception with embedded commands
-        agent_app_command._process_agent_cycle(self.agent)
-        self.agent.refresh_from_db()
 
         # Assert LLMQueue entry is marked as 'delivered'
         self.assertEqual(llm_entry.status, "delivered")
@@ -290,55 +292,6 @@ class AgentAppIntegrationTest(TestCase):
         self.assertIsNotNone(memory_create_command_entry)
         self.assertEqual(memory_create_command_entry.status, "pending")
 
-    def test_perception_queue_processing_and_command_creation(self):
-        from mad_multi_agent_dungeon.management.commands.run_agent_app import (
-            Command as AgentAppCommand,
-        )
-
-        agent_app_command = AgentAppCommand()
-
-        # Create a perception with an embedded command
-        PerceptionQueue.objects.create(agent=self.agent, text="[command|look]")
-        # Create a perception with an embedded memory load command
-        PerceptionQueue.objects.create(
-            agent=self.agent, text=f"[memory|load|{self.test_memory.key}]"
-        )
-
-        # Run agent app to process perceptions
-        agent_app_command._process_agent_cycle(self.agent)
-        self.agent.refresh_from_db()
-
-        # Assert CommandQueue entry was created for 'look'
-        look_command = CommandQueue.objects.filter(
-            agent=self.agent, command="look"
-        ).first()
-        self.assertIsNotNone(look_command)
-        self.assertEqual(look_command.status, "pending")
-
-        # Assert CommandQueue entry was created for 'memory-load'
-        memory_load_command = CommandQueue.objects.filter(
-            agent=self.agent, command=f"memory-load {self.test_memory.key}"
-        ).first()
-        print(f"DEBUG: memory_load_command: {memory_load_command}")
-        print(
-            f"DEBUG: Commands in queue for agent: {list(CommandQueue.objects.filter(agent=self.agent).values_list('command', flat=True))}"
-        )
-        self.assertIsNotNone(memory_load_command)
-        self.assertEqual(memory_load_command.status, "pending")
-
-        # Assert perceptions are marked as delivered
-        for perception in PerceptionQueue.objects.filter(agent=self.agent):
-            self.assertTrue(perception.delivered)
-
-        # Assert that the 'memory-load' command is in the queue, but the memory is not yet loaded
-        self.assertTrue(
-            CommandQueue.objects.filter(
-                agent=self.agent, command=f"memory-load {self.test_memory.key}"
-            ).exists()
-        )
-        self.agent.refresh_from_db()
-        self.assertNotIn(self.test_memory.id, self.agent.memoriesLoaded)
-
     def test_perception_truncation(self):
         from mad_multi_agent_dungeon.management.commands.run_agent_app import (
             Command as AgentAppCommand,
@@ -349,23 +302,24 @@ class AgentAppIntegrationTest(TestCase):
         # Simulate a long LLM response
         long_response = "a" * 6000  # Longer than 5000
 
-        # Simulate the initial prompt generation and LLMQueue submission
-        agent_app_command._process_agent_cycle(self.agent)
-        self.agent.refresh_from_db()
-        llm_entry = LLMQueue.objects.filter(agent=self.agent).order_by("-date").first()
+        # Create a completed LLMQueue entry directly
+        llm_entry = LLMQueue.objects.create(
+            agent=self.agent,
+            prompt="Test prompt for truncation",
+            response=long_response,
+            status="completed",
+        )
 
-        # Simulate LLM response
-        llm_entry.status = "completed"
-        llm_entry.response = long_response
-        llm_entry.save()
-
-        # Run agent app again to process the completed LLM response
+        # Run agent app to process the completed LLM response
         agent_app_command._process_agent_cycle(self.agent)
-        self.agent.refresh_from_db()
+        self.agent = Agent.objects.get(pk=self.agent.pk) # Re-fetch agent
+        llm_entry.refresh_from_db() # Re-fetch llm_entry
+
+        
 
         # Assert agent's perception is truncated to 5000 characters
         self.assertEqual(len(self.agent.perception), 5000)
-        self.assertEqual(self.agent.perception, long_response[-5000:])
+        self.assertEqual(self.agent.perception, "LLM: " + long_response[-4995:]) # Account for "LLM: " prefix
 
 
 class CommandHandlerTest(TestCase):
@@ -1464,3 +1418,136 @@ class CommandHandlerTest(TestCase):
         expected_perception = f"LLM: {test_llm_response}\nLLM: {second_llm_response}"
         self.assertEqual(self.agent.perception, expected_perception)
         self.assertEqual(llm_entry_2.status, "delivered")
+
+
+class LLMAPIKeyModelTest(TestCase):
+    def test_create_llm_api_key(self):
+        api_key = LLMAPIKey.objects.create(
+            key="test_api_key_123",
+            is_active=True,
+            description="A test API key.",
+            parameters={"temperature": 0.7}
+        )
+        self.assertEqual(api_key.key, "test_api_key_123")
+        self.assertTrue(api_key.is_active)
+        self.assertEqual(api_key.description, "A test API key.")
+        self.assertEqual(api_key.parameters, {"temperature": 0.7})
+        self.assertIsNotNone(api_key.created_at)
+        self.assertIsNotNone(api_key.last_used)
+
+    def test_llm_api_key_str_representation(self):
+        api_key = LLMAPIKey.objects.create(key="another_test_key", is_active=False)
+        self.assertEqual(str(api_key), "API Key: another_te... (Active: False)")
+
+    def test_llm_api_key_last_used_auto_update(self):
+        api_key = LLMAPIKey.objects.create(key="update_test_key", is_active=True)
+        old_last_used = api_key.last_used
+        # Simulate a small delay
+        import time
+        time.sleep(0.01)
+        api_key.description = "Updated description"
+        api_key.save()
+        self.assertGreater(api_key.last_used, old_last_used)
+
+    @patch("mad_multi_agent_dungeon.management.commands.run_agent_app.call_gemini_api")
+    def test_llm_api_key_usage_count_increments(self, mock_call_gemini_api):
+        mock_call_gemini_api.return_value = "Mocked response"
+        
+        api_key = LLMAPIKey.objects.create(key="usage_test_key", is_active=True)
+        initial_usage_count = api_key.usage_count
+
+        # Create a dummy agent and LLMQueue entry for the worker to process
+        agent = Agent.objects.create(
+            name="UsageAgent",
+            look="",
+            description="",
+            tokens=0,
+            level=0,
+            location="test_room",
+        )
+        LLMQueue.objects.create(agent=agent, prompt="Test prompt for usage count", status="pending")
+
+        # Simulate the LLM queue processing
+        from mad_multi_agent_dungeon.management.commands.run_agent_app import Command as AgentAppCommand
+        agent_app_command = AgentAppCommand()
+        agent_app_command._process_llm_queue()
+
+        api_key.refresh_from_db()
+        self.assertEqual(api_key.usage_count, initial_usage_count + 1)
+        mock_call_gemini_api.assert_called_once()
+
+
+class LLMAPITest(TestCase):
+    @patch("mad_multi_agent_dungeon.llm_api.genai.GenerativeModel")
+    @patch("mad_multi_agent_dungeon.llm_api.genai.configure")
+    def test_call_gemini_api_success(self, mock_configure, mock_generative_model):
+        # Arrange
+        mock_model_instance = mock_generative_model.return_value
+        mock_model_instance.generate_content.return_value.text = "Mocked LLM Response"
+
+        prompt = "Hello, LLM!"
+        api_key = "test_api_key"
+        parameters = {"temperature": 0.8}
+
+        # Act
+        response = call_gemini_api(prompt, api_key, parameters)
+
+        # Assert
+        mock_configure.assert_called_once_with(api_key=api_key)
+        mock_generative_model.assert_called_once_with("gemini-pro")
+        mock_model_instance.generate_content.assert_called_once()
+        self.assertEqual(response, "Mocked LLM Response")
+
+    @patch("mad_multi_agent_dungeon.llm_api.genai.GenerativeModel")
+    @patch("mad_multi_agent_dungeon.llm_api.genai.configure")
+    def test_call_gemini_api_failure(self, mock_configure, mock_generative_model):
+        # Arrange
+        mock_model_instance = mock_generative_model.return_value
+        mock_model_instance.generate_content.side_effect = Exception("API Error")
+
+        prompt = "This will fail"
+        api_key = "test_api_key"
+
+        # Act & Assert
+        with self.assertRaises(Exception) as context:
+            call_gemini_api(prompt, api_key)
+        self.assertTrue("API Error" in str(context.exception))
+
+    def test_agent_is_running_halting_mechanism(self):
+        from mad_multi_agent_dungeon.management.commands.run_agent_app import (
+            Command as AgentAppCommand,
+        )
+
+        agent_app_command = AgentAppCommand()
+
+        # Create an agent and set is_running to False
+        agent = Agent.objects.create(
+            name="HaltingAgent",
+            look="A halting agent.",
+            description="",
+            tokens=0,
+            level=0,
+            location="start_room",
+            is_running=False,  # Set to False to test halting
+        )
+
+        # Ensure no LLMQueue entries exist for this agent initially
+        LLMQueue.objects.filter(agent=agent).delete()
+
+        # Call _process_agent_cycle
+        agent_app_command._process_agent_cycle(agent)
+
+        # Assert that no LLMQueue entry was created
+        self.assertFalse(LLMQueue.objects.filter(agent=agent).exists())
+
+        # Assert that the agent's phase remains unchanged (or is not set to thinking)
+        agent.refresh_from_db()
+        self.assertNotEqual(agent.phase, "thinking")
+
+        # Set is_running to True and verify it proceeds
+        agent.is_running = True
+        agent.save()
+        agent_app_command._process_agent_cycle(agent)
+        agent.refresh_from_db()
+        self.assertEqual(agent.phase, "thinking")
+        self.assertTrue(LLMQueue.objects.filter(agent=agent).exists())

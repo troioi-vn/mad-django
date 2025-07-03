@@ -20,6 +20,13 @@ This document summarizes the features and implementation details of the `mad-dja
     *   Fields include: `agent` (ForeignKey to `Agent`, the recipient of the perception), `source_agent` (ForeignKey to `Agent`, the initiator of the action causing the perception, nullable), `type` (choices: `command`, `none`; indicates if the perception is a direct command response or an environmental event), `command` (ForeignKey to `CommandQueue`, links to the originating command, nullable), `text` (TextField, the content of the perception), `delivered` (boolean, indicates if the agent has processed this perception), and `date` (automatically set on creation).
     *   Includes `__str__` method for readable representation.
 *   **`requirements.txt`**: A `requirements.txt` file was created, initially listing `Django==5.2.3`.
+*   **`LLMAPIKey` Model**:
+    *   Created to store and manage API keys for Large Language Models.
+    *   Fields include: `key` (unique string), `is_active` (boolean), `created_at` (datetime), `last_used` (datetime), `description` (text), and `parameters` (JSONField for API-specific settings).
+    *   Includes `__str__` method for readable representation.
+*   **`llm_api.py` Module**:
+    *   A new module created to encapsulate the logic for interacting with LLM APIs.
+    *   Contains `call_gemini_api` function for making API calls to the Google Gemini API.
 
 ## Test-Driven Development (TDD) Approach
 
@@ -74,12 +81,11 @@ This document summarizes the features and implementation details of the `mad-dja
 *   **Perception Queue Worker (Agent Application)**:
     *   The agent application (`python manage.py run_agent_app <agent_name>`) now continuously polls the `PerceptionQueue` for undelivered perceptions specific to that agent.
     *   If the agent is in the 'thinking' phase, it checks for a 'completed' entry in the `LLMQueue`.
-        *   If a completed LLM response is found, its content is appended to the agent's `perception` field. The LLM response is also scanned for embedded commands (e.g., `[command|say|hi]`) or memory load patterns (e.g., `[memory|load|key]`). For each found pattern, a new entry is created in the `CommandQueue`.
+        *   If a completed LLM response is found, commands embedded within the LLM response (e.g., `[command|say|hi]`, `[memory|load|key]`) are extracted and a new entry is created in the `CommandQueue` for each. The *original* content of the LLM response is then appended to the agent's `perception` field.
         *   The `LLMQueue` entry is then marked as 'delivered', and the agent's `phase` is changed to 'acting'.
         *   If no completed LLM response is found, and there are no `pending` or `thinking` LLM requests for the agent, the agent will consolidate its prompt (base prompt + loaded memories + perception) and create a new entry in the `LLMQueue`, setting its phase to 'thinking'.
         *   If no completed LLM response is found, but there are `pending` or `thinking` LLM requests, the agent continues to wait in the 'thinking' phase.
-    *   If the agent is not in the 'thinking' phase, it processes perceptions from the `PerceptionQueue` by first checking for embedded commands (e.g., `[command|say|hi]`) or memory load patterns (e.g., `[memory|load|key]`).
-    *   If a command or memory load pattern is found in a perception, it extracts the content, creates a new entry in the `CommandQueue` (e.g., `memory-load key`), and modifies the perception's text to append "sent" (e.g., `[command|say|hi]sent` or `[memory|load|key]sent`). This also applies to commands embedded within LLM responses, which are now marked as "sent" directly within the LLM response text before being appended to the agent's perception.
+    *   If the agent is not in the 'thinking' phase, it processes perceptions from the `PerceptionQueue` by simply appending their text to the agent's `perception` field. It does *not* extract or execute commands from the perception text.
     *   After processing all perceptions for the current cycle, it constructs a comprehensive prompt for the LLM by concatenating the agent's `prompt` field, the values of all memories whose IDs are in `agent.memoriesLoaded`, and the text of the last processed perception.
     *   This combined prompt is then used to create a new entry in the `LLMQueue`, and the agent's `phase` is set to 'thinking'.
     *   Finally, it marks the perception as `delivered`.
@@ -177,7 +183,7 @@ This systematic approach ensures that each component of the application is thoro
 ## Project Architecture
 
 The agent creates its prompt and puts it into the LLM queue.
-The worker loops over the LLM queue and processes requests (sending requests to the LLM API — this should be a placeholder for now).
+The worker loops over the LLM queue and processes requests (sending requests to the LLM API).
 The agent receives a response from the LLM queue and processes it by managing memories and running commands via the commands queue.
 The worker also loops over the commands queue and processes commands from the agent. It then puts responses into the perception queue.
 The agent also loops over the perception queue and appends it to the perception part of the agent's prompt.
@@ -229,10 +235,12 @@ Structure Logs — Use module-based loggers (__name__).
 Readable or Parsable
 
 ### TODO list (concrete tasks):
-- add proper logs to the agent app
-- add proper logs to the command worker
-- add proper logs across the project
+- For now, the agent's perception is limited to 5,000 characters. I want to make it configurable.
+    1. Add a perception limit to the agent model.
+    2. Add a "perception limit" field to the first section of the agents page (and also show the used limit), like this: Perception: 5,000 (45% used).
+    3. Update tests and documentation.
 
+- To the agent's page add 'resset memory' button please
 
 
 (Gemini! Before answering, please rephrase the user's request. Keep in mind that he is learning English and would be grateful for pointing out mistakes or rephrase options. Don't be shy about using technical jargon and DevOps vocabulary. Meow!)

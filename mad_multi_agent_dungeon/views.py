@@ -137,7 +137,8 @@ def agent_detail_api(request, agent_name):
         .order_by("-date")[:10]
     )
     # Get loaded memories
-    loaded_memories = Memory.objects.filter(id__in=agent.memoriesLoaded)
+    loaded_memory_ids = agent.memoriesLoaded if agent.memoriesLoaded is not None else []
+    loaded_memories = Memory.objects.filter(id__in=loaded_memory_ids)
 
     data = {
         "agent": {

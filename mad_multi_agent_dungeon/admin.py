@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
-from .models import Agent, CommandQueue, PerceptionQueue, Memory, LLMQueue
+from .models import Agent, CommandQueue, PerceptionQueue, Memory, LLMQueue, LLMAPIKey
 
 
 class MyAdminSite(admin.AdminSite):
@@ -72,3 +72,11 @@ class LLMQueueAdmin(admin.ModelAdmin):
     list_filter = ("status", "agent", "date")
     search_fields = ("prompt", "response")
     readonly_fields = ("date",)
+
+
+@admin.register(LLMAPIKey, site=admin_site)
+class LLMAPIKeyAdmin(admin.ModelAdmin):
+    list_display = ("key", "is_active", "usage_count", "created_at", "last_used", "description", "parameters")
+    list_filter = ("is_active",)
+    search_fields = ("key", "description")
+    readonly_fields = ("created_at", "last_used")

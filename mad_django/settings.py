@@ -107,7 +107,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "Asia/Bangkok"
 
 USE_I18N = True
 
@@ -134,24 +134,7 @@ LOGGING = {
     },
     "root": {
         "handlers": ["console"],
-        "level": "DEGUG",
-    },
-}
-
-
-# CORS settings
-CORS_ALLOWED_ORIGINS = [
-    "http://127.0.0.1:8000",
-    "http://localhost:8000",
-]
-
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-        },
+        "level": "DEBUG", 
     },
     "loggers": {
         "django.server": {
@@ -161,3 +144,10 @@ LOGGING = {
         },
     },
 }
+
+
+# CORS settings
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+]

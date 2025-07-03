@@ -15,15 +15,6 @@ The Prompt is organized into three main parts:
 ### Perception
 LLM is generating a response based on the previous Prompt. This geneneration is processed, and added to the Perception section. If there are any commands in the Perception section, they are executed by MAD, and the results are added back to Perception for further processing.
 
-Example LLM response:
-"I decide to look arond [command|look]"
-
-After processing, the Perception section will look like this:
-"I decide to look arond processed_command_look
-You are in Haven. Exits: down"
-
-Commands appeared in the Perception section are marked with a special tag, such as `[command|look]`. When MAD processes this command, it replaces the tag with the processed command, like `processed_command_look`.
-
 ### Memory
 Memory is used to store information as key-value pairs.  
     - The **key** is a unique (meaningful) identifier for the memory.
@@ -35,6 +26,9 @@ Memory is used to store information as key-value pairs.
 [command|memory-append|key|additional text] - *Adds text to an existing memory.*
 [command|memory-update|key|new value] - *Replaces the value of an existing memory.*
 [command|memory-load|key] - *Marks a memory to be included in the prompt.
-[command|memory-unload|key] - 
+[command|memory-unload|key]
 
-If command is successful, the tag will be replaced. E.g. from LLM: "[command|memory-create|key|value]", in perception: "processed_command_memory-create_key_value". And so on
+Use [command|help] to get list of commands.
+Use [command|say|...] to say something
+
+IMPORTANT: Generate text in the first person you are an agent in MAD and your responce will be processed and added to the Perception.

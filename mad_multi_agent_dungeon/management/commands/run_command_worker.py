@@ -51,7 +51,7 @@ class Command(BaseCommand):
                 source_agent=command_entry.agent,
                 type="command",
                 command=command_entry,
-                text=command_entry.output,
+                text=f"MAD: [command|{command_entry.command}].\n{command_entry.output}",
             )
 
             # Handle "shout" command for other active agents in the same room

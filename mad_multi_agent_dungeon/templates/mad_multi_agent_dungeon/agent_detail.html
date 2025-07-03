@@ -356,9 +356,11 @@
         // Focus the command input field on page load
         document.getElementById('copy-consolidated-prompt').addEventListener('click', function() {
             const textarea = document.getElementById('consolidated_prompt_textarea');
+            textarea.style.display = 'block'; // Make it visible
             textarea.select();
             textarea.setSelectionRange(0, 99999); // For mobile devices
             document.execCommand('copy');
+            textarea.style.display = 'none'; // Hide it again
         });
 
         window.onload = function() {
