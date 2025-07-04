@@ -6,13 +6,12 @@ from pathlib import Path
 from django.utils import timezone
 
 from .memory_commands import (
-    memory_append_handler,
-    memory_create_handler,
-    memory_list_handler,
-    memory_load_handler,
-    memory_remove_handler,
-    memory_unload_handler,
-    memory_update_handler,
+    remember_handler,
+    remember_append_handler,
+    forget_handler,
+    list_handler,
+    load_handler,
+    unload_handler,
 )
 from .models import Agent, ObjectInstance, PerceptionQueue
 
@@ -291,8 +290,12 @@ def use_handler(command_entry):
 
 def help_handler(command_entry):
     logger.debug(f"Executing help for agent {command_entry.agent.name}")
-    available_commands = ", ".join(sorted(COMMAND_HANDLERS.keys()))
-    command_entry.output = f"Available commands: {available_commands}"
+    available_commands = [
+        "ping", "look", "go", "inventory", "examine", "where", "shout", "use",
+        "help", "meditate", "wait", "score", "say", "edit",
+        "remember", "remember-append", "forget", "list", "load", "unload"
+    ]
+    command_entry.output = f"Available commands: {', '.join(sorted(available_commands))}"
     command_entry.status = "completed"
     command_entry.save()
 
@@ -499,13 +502,13 @@ COMMAND_HANDLERS = {
     "score": score_handler,
     "say": say_handler,
     "l": look_handler,
-    "memory-create": memory_create_handler,
-    "memory-update": memory_update_handler,
-    "memory-append": memory_append_handler,
-    "memory-remove": memory_remove_handler,
-    "memory-list": memory_list_handler,
-    "memory-load": memory_load_handler,
-    "memory-unload": memory_unload_handler,
+    "l": look_handler,
+    "remember": remember_handler,
+    "remember-append": remember_append_handler,
+    "forget": forget_handler,
+    "list": list_handler,
+    "load": load_handler,
+    "unload": unload_handler,
     "edit": edit_profile_handler,
 }
 

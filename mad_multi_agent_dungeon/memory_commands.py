@@ -1,11 +1,11 @@
 from .models import Memory
 
 
-def memory_create_handler(command_entry):
+def remember_handler(command_entry):
     agent = command_entry.agent
     parts = command_entry.command.split(maxsplit=2)
     if len(parts) < 3:
-        command_entry.output = "Usage: memory-create <key> <value>"
+        command_entry.output = "Usage: remember <key> <value>"
         command_entry.status = "failed"
         command_entry.save()
         return
@@ -14,47 +14,25 @@ def memory_create_handler(command_entry):
     value = parts[2]
 
     try:
-        Memory.objects.create(agent=agent, key=key, value=value)
-        command_entry.output = f"Memory '{key}' created successfully."
-        command_entry.status = "completed"
-    except Exception as e:
-        command_entry.output = f"Error creating memory: {e}"
-        command_entry.status = "failed"
-    command_entry.save()
-
-
-def memory_update_handler(command_entry):
-    agent = command_entry.agent
-    parts = command_entry.command.split(maxsplit=2)
-    if len(parts) < 3:
-        command_entry.output = "Usage: memory-update <key> <new_value>"
-        command_entry.status = "failed"
-        command_entry.save()
-        return
-
-    key = parts[1]
-    new_value = parts[2]
-
-    try:
-        memory = Memory.objects.get(agent=agent, key=key)
-        memory.value = new_value
+        memory, created = Memory.objects.get_or_create(agent=agent, key=key)
+        memory.value = value
         memory.save()
-        command_entry.output = f"Memory '{key}' updated successfully."
+        if created:
+            command_entry.output = f"Memory '{key}' created successfully."
+        else:
+            command_entry.output = f"Memory '{key}' updated successfully."
         command_entry.status = "completed"
-    except Memory.DoesNotExist:
-        command_entry.output = f"Memory '{key}' not found for this agent."
-        command_entry.status = "failed"
     except Exception as e:
-        command_entry.output = f"Error updating memory: {e}"
+        command_entry.output = f"Error remembering memory: {e}"
         command_entry.status = "failed"
     command_entry.save()
 
 
-def memory_append_handler(command_entry):
+def remember_append_handler(command_entry):
     agent = command_entry.agent
     parts = command_entry.command.split(maxsplit=2)
     if len(parts) < 3:
-        command_entry.output = "Usage: memory-append <key> <text_to_append>"
+        command_entry.output = "Usage: remember-append <key> <text_to_append>"
         command_entry.status = "failed"
         command_entry.save()
         return
@@ -77,11 +55,11 @@ def memory_append_handler(command_entry):
     command_entry.save()
 
 
-def memory_remove_handler(command_entry):
+def forget_handler(command_entry):
     agent = command_entry.agent
     parts = command_entry.command.split(maxsplit=1)
     if len(parts) < 2:
-        command_entry.output = "Usage: memory-remove <key>"
+        command_entry.output = "Usage: forget <key>"
         command_entry.status = "failed"
         command_entry.save()
         return
@@ -102,7 +80,7 @@ def memory_remove_handler(command_entry):
     command_entry.save()
 
 
-def memory_list_handler(command_entry):
+def list_handler(command_entry):
     agent = command_entry.agent
     memories = Memory.objects.filter(agent=agent).order_by("key")
     if memories.exists():
@@ -116,11 +94,11 @@ def memory_list_handler(command_entry):
     command_entry.save()
 
 
-def memory_load_handler(command_entry):
+def load_handler(command_entry):
     agent = command_entry.agent
     parts = command_entry.command.split(maxsplit=1)
     if len(parts) < 2:
-        command_entry.output = "Usage: memory-load <key>"
+        command_entry.output = "Usage: load <key>"
         command_entry.status = "failed"
         command_entry.save()
         return
@@ -145,11 +123,11 @@ def memory_load_handler(command_entry):
     command_entry.save()
 
 
-def memory_unload_handler(command_entry):
+def unload_handler(command_entry):
     agent = command_entry.agent
     parts = command_entry.command.split(maxsplit=1)
     if len(parts) < 2:
-        command_entry.output = "Usage: memory-unload <key>"
+        command_entry.output = "Usage: unload <key>"
         command_entry.status = "failed"
         command_entry.save()
         return

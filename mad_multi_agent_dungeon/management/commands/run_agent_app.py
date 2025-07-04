@@ -174,8 +174,8 @@ class Command(BaseCommand):
             # Process embedded commands from LLM response
             original_llm_response = llm_entry.response
             llm_command_pattern = r"\[command\|(.+?)\]"
-            llm_memory_load_pattern = r"\[memory\|load\|(.+?)\]"
-            llm_memory_create_pattern = r"\[memory\|create\|(.+?)\]"
+            llm_load_pattern = r"\[load\|(.+?)\]"
+            llm_remember_pattern = r"\[remember\|(.+?)\]"
 
             # Process regular commands
             for match in re.finditer(llm_command_pattern, original_llm_response):
@@ -190,22 +190,22 @@ class Command(BaseCommand):
                 )
 
             # Process memory-load commands
-            for match in re.finditer(llm_memory_load_pattern, original_llm_response):
+            for match in re.finditer(llm_load_pattern, original_llm_response):
                 memory_key = match.group(1)
-                command_to_queue = f"memory-load {memory_key}"
+                command_to_queue = f"load {memory_key}"
                 CommandQueue.objects.create(agent=agent, command=command_to_queue)
                 logger.info(
                     f"Queued command '{command_to_queue}' from LLM response for agent '{agent.name}'."
                 )
 
-            # Process memory-create commands
-            for match in re.finditer(llm_memory_create_pattern, original_llm_response):
+            # Process memory-create/update commands
+            for match in re.finditer(llm_remember_pattern, original_llm_response):
                 content = match.group(1)
                 parts = content.split("|")
                 if len(parts) >= 2:
                     memory_key = parts[0]
                     memory_value = "|".join(parts[1:])
-                    command_to_queue = f"memory-create {memory_key} {memory_value}"
+                    command_to_queue = f"remember {memory_key} {memory_value}"
                     CommandQueue.objects.create(agent=agent, command=command_to_queue)
                     logger.info(
                         f"Queued command '{command_to_queue}' from LLM response for agent '{agent.name}'."

@@ -63,13 +63,12 @@ This document summarizes the features and implementation details of the `mad-dja
 *   **`help`**: Lists all available commands.
 *   **`score`**: Displays the agent's current stats (name, level, tokens, location).
 *   **`meditate <duration>`**: The agent meditates for a specified duration (e.g., `meditate 5m`).
-*   **`memory-create <key> <value>`**: Creates a new memory with the specified key and value.
-*   **`memory-update <key> <new_value>`**: Updates the value of an existing memory.
-*   **`memory-append <key> <text_to_append>`**: Appends text to the value of an existing memory.
-*   **`memory-remove <key>`**: Removes a memory.
-*   **`memory-list`**: Lists all memories for the agent.
-*   **`memory-load <key>`**: Adds the ID of the specified memory to the agent's `memoriesLoaded` list.
-*   **`memory-unload <key>`**: Removes the ID of the specified memory from the agent's `memoriesLoaded` list.
+*   **`remember <key> <value>`**: Stores or updates a memory. If the key exists, the value is updated; otherwise, a new memory is created.
+*   **`remember-append <key> <text_to_append>`**: Appends text to an existing memory.
+*   **`forget <key>`**: Removes a memory.
+*   **`list`**: Lists all memories for the agent.
+*   **`load <key>`**: Adds the ID of the specified memory to the agent's `memoriesLoaded` list.
+*   **`unload <key>`**: Removes the ID of the specified memory from the agent's `memoriesLoaded` list.
 
 ## Command and Perception Queue Workers
 
@@ -238,6 +237,41 @@ Structure Logs — Use module-based loggers (__name__).
 Readable or Parsable
 
 ### TODO list (concrete tasks):
+- For now, the agent's perception is limited to 5,000 characters. I want to make it configurable.
+    1. Add a perception limit to the agent model. (DONE)
+    2. Add a "perception limit" field to the first section of the agents page (and also show the used limit), like this: Perception: 5,000 (45% used). (DONE)
+    3. Update tests and documentation. (DONE)
 
+- To the agent's page add 'resset memory' button please (DONE)
+
+- **Simplify Memory Command Format**: (DONE)
+    1.  **Refactor `memory-create` and `memory-update` into `remember <key> <value>`**: (DONE)
+        *   Modify `memory_commands.py` to implement the `remember` command.
+        *   If `<key>` exists, update its `value`; otherwise, create a new memory.
+        *   Update any LLM prompt examples or internal logic that uses `memory-create` or `memory-update`.
+        *   Update tests.
+    2.  **Rename `memory-append` to `remember-append <key> <text_to_append>`**: (DONE)
+        *   Modify `memory_commands.py` to implement the `remember-append` command.
+        *   Update any LLM prompt examples or internal logic that uses `memory-append`.
+        *   Update tests.
+    3.  **Rename `memory-remove` to `forget <key>`**: (DONE)
+        *   Modify `memory_commands.py` to implement the `forget` command.
+        *   Update any LLM prompt examples or internal logic that uses `memory-remove`.
+        *   Update tests.
+    4.  **Rename `memory-list` to `list`**: (DONE)
+        *   Modify `memory_commands.py` to implement the `list` command.
+        *   Update any LLM prompt examples or internal logic that uses `memory-list`.
+        *   Update tests.
+    5.  **Rename `memory-load` to `load <key>`**: (DONE)
+        *   Modify `memory_commands.py` to implement the `load` command.
+        *   Update any LLM prompt examples or internal logic that uses `memory-load`.
+        *   Update tests.
+    6.  **Rename `memory-unload` to `unload <key>`**: (DONE)
+        *   Modify `memory_commands.py` to implement the `unload` command.
+        *   Update any LLM prompt examples or internal logic that uses `memory-unload`.
+        *   Update tests.
+    7.  **Update `commands.py`**: Adjust `COMMAND_HANDLERS` to map to the new command names. (DONE)
+    8.  **Update `help` command output**: Reflect the new memory command names. (DONE)
+    9.  **Update `GEMINI.md`**: Document the new memory command format and their usage. (DONE)
 
 (Gemini! Before answering, please rephrase the user's request. Keep in mind that he is learning English and would be grateful for pointing out mistakes or rephrase options. Don't be shy about using technical jargon and DevOps vocabulary. Meow!)

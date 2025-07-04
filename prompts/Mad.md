@@ -30,7 +30,7 @@ Memory is used to store information as key-value pairs.
    * [command|memory-load|Key]: Loads a memory for agent processing.
    * [command|memory-unload|Key]: Unloads a memory.
 
- The [command|...] syntax is used when these commands are embedded within an LLM's response, indicating to the system that the enclosed text is a command to be extracted and processed. So, for an LLM to issue a memory command, it would look like [command|memory-load|my_key].
+ The [command|...] syntax is used when these commands are embedded within an LLM's response, indicating to the system that the enclosed text is a command to be extracted and processed. So, for an LLM to issue a memory command, it would look like [command|memory-load|my_key] It is mandatory to use the | separator between the key and the value
 
 Use [command|say|...] to say something
 Use [command|help] to get list of commands.

@@ -279,7 +279,7 @@ class AgentAppIntegrationTest(TestCase):
         
 
         # Create a completed LLMQueue entry directly
-        test_llm_response = "LLM says: Hello! [command|say|Hello from LLM!] [memory|create|llm_key|llm_value]"
+        test_llm_response = "LLM says: Hello! [command|say|Hello from LLM!] [remember|llm_key|llm_value]"
         llm_entry = LLMQueue.objects.create(
             agent=self.agent,
             prompt="Test prompt",
@@ -295,7 +295,7 @@ class AgentAppIntegrationTest(TestCase):
         # Assert agent's perception is updated with the original LLM response
         self.assertIn("LLM says: Hello!", self.agent.perception)
         self.assertIn("[command|say|Hello from LLM!]", self.agent.perception)
-        self.assertIn("[memory|create|llm_key|llm_value]", self.agent.perception)
+        self.assertIn("[remember|llm_key|llm_value]", self.agent.perception)
 
         # Assert agent phase is 'acting'
         self.assertEqual(self.agent.phase, "acting")
@@ -311,7 +311,7 @@ class AgentAppIntegrationTest(TestCase):
         self.assertEqual(say_command_entry.status, "pending")
 
         memory_create_command_entry = CommandQueue.objects.filter(
-            agent=self.agent, command="memory-create llm_key llm_value"
+            agent=self.agent, command="remember llm_key llm_value"
         ).first()
         self.assertIsNotNone(memory_create_command_entry)
         self.assertEqual(memory_create_command_entry.status, "pending")
