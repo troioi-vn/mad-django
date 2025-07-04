@@ -27,6 +27,7 @@ class AgentAdmin(admin.ModelAdmin):
         "level",
         "tokens",
         "phase",
+        "perception_limit",
         "is_active",
         "last_command_sent",
         "last_retrieved",
@@ -35,6 +36,34 @@ class AgentAdmin(admin.ModelAdmin):
     list_filter = ("location", "phase", "last_command_sent")
     search_fields = ("name", "look", "description", "location")
     readonly_fields = ("last_command_sent", "last_retrieved")
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "look",
+                    "description",
+                    "location",
+                    "tokens",
+                    "level",
+                    "phase",
+                    "perception_limit",
+                    "is_running",
+                    "prompt",
+                    "perception",
+                    "memoriesLoaded",
+                )
+            },
+        ),
+        (
+            "Timestamps",
+            {
+                "fields": ("last_command_sent", "last_retrieved"),
+                "classes": ("collapse",),
+            },
+        ),
+    )
 
     def view_agent_dashboard(self, obj):
         url = reverse("agent_detail", args=[obj.name])
@@ -76,7 +105,15 @@ class LLMQueueAdmin(admin.ModelAdmin):
 
 @admin.register(LLMAPIKey, site=admin_site)
 class LLMAPIKeyAdmin(admin.ModelAdmin):
-    list_display = ("key", "is_active", "usage_count", "created_at", "last_used", "description", "parameters")
+    list_display = (
+        "key",
+        "is_active",
+        "usage_count",
+        "created_at",
+        "last_used",
+        "description",
+        "parameters",
+    )
     list_filter = ("is_active",)
     search_fields = ("key", "description")
     readonly_fields = ("created_at", "last_used")

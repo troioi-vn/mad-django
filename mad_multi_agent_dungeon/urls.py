@@ -11,6 +11,11 @@ urlpatterns = [
     path("api/agent/<str:agent_name>/stop/", views.stop_agent, name="stop_agent"),
     path("api/agent/<str:agent_name>/reset/", views.reset_agent, name="reset_agent"),
     path(
+        "api/agent/<str:agent_name>/reset_memory/",
+        views.reset_agent_memory,
+        name="reset_agent_memory",
+    ),
+    path(
         "api/agent/<str:agent_name>/update_prompt/",
         views.update_prompt,
         name="update_prompt",

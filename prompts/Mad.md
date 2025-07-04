@@ -22,13 +22,17 @@ Memory is used to store information as key-value pairs.
     - You can create, update, append to, load, and remove memories.
     - Loading a memory makes its value available in the Memory section of the Prompt.
 
-[command|memory-create|key|value] - *Creates a new memory with the given key and value.*
-[command|memory-append|key|additional text] - *Adds text to an existing memory.*
-[command|memory-update|key|new value] - *Replaces the value of an existing memory.*
-[command|memory-load|key] - *Marks a memory to be included in the prompt.
-[command|memory-unload|key]
+   * [command|memory-create|Key|Value]: Creates a new memory.
+   * [command|memory-update|Key|NewValue]: Updates an existing memory.
+   * [command|memory-append|Key|TextToAppend]: Appends text to a memory.
+   * [command|memory-remove|Key]: Deletes a memory.
+   * [command|memory-list]: Lists all memories.
+   * [command|memory-load|Key]: Loads a memory for agent processing.
+   * [command|memory-unload|Key]: Unloads a memory.
 
-Use [command|help] to get list of commands.
+ The [command|...] syntax is used when these commands are embedded within an LLM's response, indicating to the system that the enclosed text is a command to be extracted and processed. So, for an LLM to issue a memory command, it would look like [command|memory-load|my_key].
+
 Use [command|say|...] to say something
+Use [command|help] to get list of commands.
 
 IMPORTANT: Generate text in the first person you are an agent in MAD and your responce will be processed and added to the Perception.

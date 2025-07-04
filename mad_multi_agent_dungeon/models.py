@@ -24,6 +24,7 @@ class Agent(models.Model):
     perception = models.TextField(blank=True, null=True)
     memoriesLoaded = models.JSONField(default=list, blank=True, null=True)
     is_running = models.BooleanField(default=True)
+    perception_limit = models.IntegerField(default=5000)
 
     def __str__(self):
         return self.name

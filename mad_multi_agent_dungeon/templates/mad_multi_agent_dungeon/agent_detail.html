@@ -74,6 +74,7 @@
                 <button id="start-agent">Start</button>
                 <button id="stop-agent">Stop</button>
                 <button id="reset-agent">Reset</button>
+                <button id="reset-memory">Reset Memory</button>
             </p>
             <form method="post" style="display: flex; align-items: center; gap: 1em;">
                 {% csrf_token %}
@@ -94,6 +95,7 @@
             <p><strong>Location:</strong> <span id="location"></span></p>
             <p><strong>Level:</strong> <span id="level"></span></p>
             <p><strong>Tokens:</strong> <span id="tokens"></span></p>
+            <p><strong>Perception:</strong> <span id="perception_current_length"></span> / <span id="perception_limit"></span> (<span id="perception_usage_percentage"></span>% used)</p>
             
         </div>
 
@@ -163,6 +165,10 @@
                     document.getElementById('location').textContent = `${agent.location}: ${agent.room_title}`;
                     document.getElementById('level').textContent = agent.level;
                     document.getElementById('tokens').textContent = agent.tokens;
+                    document.getElementById('perception_limit').textContent = agent.perception_limit;
+                    document.getElementById('perception_current_length').textContent = agent.perception.length;
+                    const usagePercentage = (agent.perception.length / agent.perception_limit * 100).toFixed(2);
+                    document.getElementById('perception_usage_percentage').textContent = usagePercentage;
 
                     // Buttons
                     document.getElementById('start-agent').disabled = agent.is_running;
@@ -317,6 +323,16 @@
 
         document.getElementById('reset-agent').addEventListener('click', function() {
             fetch(`/api/agent/{{ agent.name }}/reset/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/json'
+                }
+            }).then(() => updateData());
+        });
+
+        document.getElementById('reset-memory').addEventListener('click', function() {
+            fetch(`/api/agent/{{ agent.name }}/reset_memory/`, {
                 method: 'POST',
                 headers: {
                     'X-CSRFToken': csrftoken,

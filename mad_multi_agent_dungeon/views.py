@@ -81,6 +81,19 @@ def reset_agent(request, agent_name):
     )
 
 
+def reset_agent_memory(request, agent_name):
+    agent = get_object_or_404(Agent, name=agent_name)
+    Memory.objects.filter(agent=agent).delete()
+    agent.memoriesLoaded = []
+    agent.save()
+    return JsonResponse(
+        {
+            "status": "success",
+            "message": f"Agent {agent.name}'s memories have been reset.",
+        }
+    )
+
+
 def update_prompt(request, agent_name):
     if request.method == "POST":
         agent = get_object_or_404(Agent, name=agent_name)
@@ -157,6 +170,7 @@ def agent_detail_api(request, agent_name):
             ),
             "prompt": agent.prompt,
             "perception": agent.perception,
+            "perception_limit": agent.perception_limit,
         },
         "loaded_memories": [{"key": m.key, "value": m.value} for m in loaded_memories],
         "commands": [

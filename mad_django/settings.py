@@ -134,7 +134,7 @@ LOGGING = {
     },
     "root": {
         "handlers": ["console"],
-        "level": "DEBUG", 
+        "level": "DEBUG",
     },
     "loggers": {
         "django.server": {

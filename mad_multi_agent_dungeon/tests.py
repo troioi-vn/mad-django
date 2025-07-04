@@ -109,6 +109,30 @@ class AgentModelTest(TestCase):
         )
         self.assertFalse(never_commanded_agent.is_active())
 
+    def test_perception_limit_field(self):
+        # Test default value
+        agent_default = Agent.objects.create(
+            name="AgentDefault",
+            look="",
+            description="",
+            tokens=0,
+            level=0,
+            location="start_room",
+        )
+        self.assertEqual(agent_default.perception_limit, 5000)
+
+        # Test custom value
+        agent_custom = Agent.objects.create(
+            name="AgentCustom",
+            look="",
+            description="",
+            tokens=0,
+            level=0,
+            location="start_room",
+            perception_limit=10000,
+        )
+        self.assertEqual(agent_custom.perception_limit, 10000)
+
 
 class CommandQueueModelTest(TestCase):
     def setUp(self):
@@ -174,7 +198,7 @@ class AgentAppIntegrationTest(TestCase):
             level=0,
             location="start_room",
             phase="idle",
-            perception="", # Initialize perception to an empty string
+            perception="",  # Initialize perception to an empty string
         )
         # Create a dummy prompt file
         with open(self.prompt_file, "w") as f:
@@ -189,10 +213,12 @@ class AgentAppIntegrationTest(TestCase):
         LLMQueue.objects.all().delete()
         CommandQueue.objects.all().delete()
         PerceptionQueue.objects.all().delete()
-        LLMAPIKey.objects.all().delete() # Clear API keys
+        LLMAPIKey.objects.all().delete()  # Clear API keys
 
         # Create an active API key for testing
-        self.active_api_key = LLMAPIKey.objects.create(key="test_api_key", is_active=True)
+        self.active_api_key = LLMAPIKey.objects.create(
+            key="test_api_key", is_active=True
+        )
 
     def tearDown(self):
         # Clean up the created prompt file
@@ -250,7 +276,7 @@ class AgentAppIntegrationTest(TestCase):
         agent_app_command = AgentAppCommand()
 
         # Create an active API key for this specific test
-        api_key_for_test = LLMAPIKey.objects.create(key="test_api_key_for_update", is_active=True)
+        
 
         # Create a completed LLMQueue entry directly
         test_llm_response = "LLM says: Hello! [command|say|Hello from LLM!] [memory|create|llm_key|llm_value]"
@@ -260,13 +286,11 @@ class AgentAppIntegrationTest(TestCase):
             response=test_llm_response,
             status="completed",
         )
-        
 
         # Run agent app to process the completed LLM response (updates agent perception)
         agent_app_command._process_agent_cycle(self.agent)
-        self.agent.refresh_from_db() # Re-fetch agent
-        llm_entry.refresh_from_db() # Re-fetch llm_entry
-        
+        self.agent.refresh_from_db()  # Re-fetch agent
+        llm_entry.refresh_from_db()  # Re-fetch llm_entry
 
         # Assert agent's perception is updated with the original LLM response
         self.assertIn("LLM says: Hello!", self.agent.perception)
@@ -299,8 +323,12 @@ class AgentAppIntegrationTest(TestCase):
 
         agent_app_command = AgentAppCommand()
 
+        # Set a custom perception limit for the agent
+        self.agent.perception_limit = 1000
+        self.agent.save()
+
         # Simulate a long LLM response
-        long_response = "a" * 6000  # Longer than 5000
+        long_response = "a" * 2000  # Longer than the custom limit
 
         # Create a completed LLMQueue entry directly
         llm_entry = LLMQueue.objects.create(
@@ -312,14 +340,40 @@ class AgentAppIntegrationTest(TestCase):
 
         # Run agent app to process the completed LLM response
         agent_app_command._process_agent_cycle(self.agent)
-        self.agent = Agent.objects.get(pk=self.agent.pk) # Re-fetch agent
-        llm_entry.refresh_from_db() # Re-fetch llm_entry
+        self.agent = Agent.objects.get(pk=self.agent.pk)  # Re-fetch agent
+        llm_entry.refresh_from_db()  # Re-fetch llm_entry
 
-        
+        # Assert agent's perception is truncated to the custom limit
+        self.assertEqual(len(self.agent.perception), self.agent.perception_limit)
+        # Account for "LLM: " prefix (4 characters) when checking content
+        expected_content = "LLM: " + long_response[-(self.agent.perception_limit - 5):]
+        self.assertEqual(self.agent.perception, expected_content)
 
-        # Assert agent's perception is truncated to 5000 characters
-        self.assertEqual(len(self.agent.perception), 5000)
-        self.assertEqual(self.agent.perception, "LLM: " + long_response[-4995:]) # Account for "LLM: " prefix
+    def test_reset_agent_memory_api(self):
+        # Ensure a clean slate for memories before this test
+        Memory.objects.filter(agent=self.agent).delete()
+        self.agent.memoriesLoaded = []
+        self.agent.save()
+
+        # Create some memories for the agent
+        Memory.objects.create(agent=self.agent, key="memory1", value="value1")
+        Memory.objects.create(agent=self.agent, key="memory2", value="value2")
+        self.agent.memoriesLoaded = [m.id for m in Memory.objects.filter(agent=self.agent)]
+        self.agent.save()
+
+        # Assert memories exist before reset
+        self.assertEqual(Memory.objects.filter(agent=self.agent).count(), 2)
+        self.assertEqual(len(self.agent.memoriesLoaded), 2)
+
+        # Call the reset_memory API endpoint
+        response = self.client.post(reverse("reset_agent_memory", args=[self.agent.name]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content)["status"], "success")
+
+        # Refresh agent and assert memories are deleted and memoriesLoaded is empty
+        self.agent.refresh_from_db()
+        self.assertEqual(Memory.objects.filter(agent=self.agent).count(), 0)
+        self.assertEqual(self.agent.memoriesLoaded, [])
 
 
 class CommandHandlerTest(TestCase):
@@ -1426,7 +1480,7 @@ class LLMAPIKeyModelTest(TestCase):
             key="test_api_key_123",
             is_active=True,
             description="A test API key.",
-            parameters={"temperature": 0.7}
+            parameters={"temperature": 0.7},
         )
         self.assertEqual(api_key.key, "test_api_key_123")
         self.assertTrue(api_key.is_active)
@@ -1444,6 +1498,7 @@ class LLMAPIKeyModelTest(TestCase):
         old_last_used = api_key.last_used
         # Simulate a small delay
         import time
+
         time.sleep(0.01)
         api_key.description = "Updated description"
         api_key.save()
@@ -1452,7 +1507,7 @@ class LLMAPIKeyModelTest(TestCase):
     @patch("mad_multi_agent_dungeon.management.commands.run_agent_app.call_gemini_api")
     def test_llm_api_key_usage_count_increments(self, mock_call_gemini_api):
         mock_call_gemini_api.return_value = "Mocked response"
-        
+
         api_key = LLMAPIKey.objects.create(key="usage_test_key", is_active=True)
         initial_usage_count = api_key.usage_count
 
@@ -1465,10 +1520,15 @@ class LLMAPIKeyModelTest(TestCase):
             level=0,
             location="test_room",
         )
-        LLMQueue.objects.create(agent=agent, prompt="Test prompt for usage count", status="pending")
+        LLMQueue.objects.create(
+            agent=agent, prompt="Test prompt for usage count", status="pending"
+        )
 
         # Simulate the LLM queue processing
-        from mad_multi_agent_dungeon.management.commands.run_agent_app import Command as AgentAppCommand
+        from mad_multi_agent_dungeon.management.commands.run_agent_app import (
+            Command as AgentAppCommand,
+        )
+
         agent_app_command = AgentAppCommand()
         agent_app_command._process_llm_queue()
 
@@ -1494,7 +1554,7 @@ class LLMAPITest(TestCase):
 
         # Assert
         mock_configure.assert_called_once_with(api_key=api_key)
-        mock_generative_model.assert_called_once_with("gemini-pro")
+        mock_generative_model.assert_called_once_with("gemini-1.5-flash")
         mock_model_instance.generate_content.assert_called_once()
         self.assertEqual(response, "Mocked LLM Response")
 

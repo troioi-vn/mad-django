@@ -79,14 +79,20 @@ class Command(BaseCommand):
     def _process_llm_queue(self):
         pending_llm_requests = LLMQueue.objects.filter(status="pending")
         for llm_request in pending_llm_requests:
-            logger.info(f"Processing pending LLM request {llm_request.id} for agent {llm_request.agent.name}")
+            logger.info(
+                f"Processing pending LLM request {llm_request.id} for agent {llm_request.agent.name}"
+            )
             llm_request.status = "thinking"
             llm_request.save()
 
             api_key_obj = LLMAPIKey.objects.filter(is_active=True).first()
             if not api_key_obj:
-                logger.error("No active LLM API key found. Marking LLM request as failed.")
-                print("DEBUG: No active LLM API key found in _process_llm_queue") # Debug print
+                logger.error(
+                    "No active LLM API key found. Marking LLM request as failed."
+                )
+                print(
+                    "DEBUG: No active LLM API key found in _process_llm_queue"
+                )  # Debug print
                 llm_request.status = "failed"
                 llm_request.response = "Error: No active API key found."
                 llm_request.save()
@@ -101,7 +107,9 @@ class Command(BaseCommand):
                 api_key_obj.last_used = timezone.now()
                 api_key_obj.usage_count += 1
                 api_key_obj.save()
-                logger.info(f"LLM request {llm_request.id} completed for agent {llm_request.agent.name}.")
+                logger.info(
+                    f"LLM request {llm_request.id} completed for agent {llm_request.agent.name}."
+                )
             except Exception as e:
                 logger.error(f"Error calling LLM API for request {llm_request.id}: {e}")
                 llm_request.response = f"Error: {e}"
@@ -109,7 +117,7 @@ class Command(BaseCommand):
             llm_request.save()
 
     def _process_agent_cycle(self, agent):
-        agent.perception = agent.perception or "" # Ensure perception is a string
+        agent.perception = agent.perception or ""  # Ensure perception is a string
         if not agent.is_running:
             return  # Skip processing if the agent is not running
         # Get undelivered perceptions for the agent
@@ -136,13 +144,11 @@ class Command(BaseCommand):
                     processed_perception_texts
                 )
             else:
-                agent.perception = "MAD: " + "\nMAD: ".join(
-                    processed_perception_texts
-                )
+                agent.perception = "MAD: " + "\nMAD: ".join(processed_perception_texts)
 
             agent.perception = agent.perception[
-                -5000:
-            ]  # Keep only the last 5000 characters
+                -agent.perception_limit :
+            ]  # Keep only the last `perception_limit` characters
 
             agent.last_retrieved = timezone.now()
             agent.save()
@@ -162,7 +168,9 @@ class Command(BaseCommand):
             logger.info(
                 f"Processing completed LLM response {llm_entry.id} for agent '{agent.name}'. (Status: {llm_entry.status})"
             )
-            print(f"DEBUG: Agent {agent.name} perception BEFORE update: '{agent.perception}'") # DEBUG
+            print(
+                f"DEBUG: Agent {agent.name} perception BEFORE update: '{agent.perception}'"
+            )  # DEBUG
             # Process embedded commands from LLM response
             original_llm_response = llm_entry.response
             llm_command_pattern = r"\[command\|(.+?)\]"
@@ -204,20 +212,31 @@ class Command(BaseCommand):
                     )
 
             # Append original LLM response to agent's perception field
-            # Truncate original_llm_response to make space for "LLM: " prefix
-            truncated_llm_response = original_llm_response[-4995:]
+            # Calculate how much of the original_llm_response can fit
+            # after accounting for the "LLM: " prefix and potential newline
+            space_for_llm_response = agent.perception_limit - len("LLM: ")
+            if agent.perception:
+                space_for_llm_response -= len("\n") # Account for newline if appending
+
+            # Ensure we don't try to take a negative slice
+            if space_for_llm_response < 0:
+                space_for_llm_response = 0
+
+            truncated_llm_response = original_llm_response[-space_for_llm_response:]
             prefixed_llm_response = "LLM: " + truncated_llm_response
 
             if agent.perception:
-                agent.perception += "\n" + prefixed_llm_response
+                new_perception_content = agent.perception + "\n" + prefixed_llm_response
             else:
-                agent.perception = prefixed_llm_response
-            agent.perception = agent.perception[
-                -5000:
-            ]  # Keep only the last 5000 characters
+                new_perception_content = prefixed_llm_response
+
+            # Ensure the total perception does not exceed the limit
+            agent.perception = new_perception_content[-agent.perception_limit:]
             agent.save()
             logger.debug(f"Agent '{agent.name}' perception updated with LLM response.")
-            print(f"DEBUG: Agent {agent.name} perception AFTER update: '{agent.perception}'") # DEBUG
+            print(
+                f"DEBUG: Agent {agent.name} perception AFTER update: '{agent.perception}'"
+            )  # DEBUG
 
             # Mark LLMQueue entry as delivered
             llm_entry.status = "delivered"
@@ -234,7 +253,9 @@ class Command(BaseCommand):
 
             return  # Processed a completed LLM, so return for next cycle to allow commands to be processed
 
-        print(f"DEBUG: No completed LLM entry found for agent {agent.name} or already delivered.") # DEBUG
+        print(
+            f"DEBUG: No completed LLM entry found for agent {agent.name} or already delivered."
+        )  # DEBUG
 
         # If no completed LLM entry was found, or if we just processed one and are now in 'acting' phase,
         # determine next action based on current LLM queue status.
@@ -286,9 +307,11 @@ class Command(BaseCommand):
         final_llm_prompt = "\n".join(llm_prompt_parts)
 
         if not agent.is_running:
-            logger.info(f"Agent '{agent.name}' is not running. Halting for inspection. Prompt that would have been sent:\n{final_llm_prompt}")
-            time.sleep(5) # Sleep to prevent rapid logging
-            return # Skip processing if the agent is not running
+            logger.info(
+                f"Agent '{agent.name}' is not running. Halting for inspection. Prompt that would have been sent:\n{final_llm_prompt}"
+            )
+            time.sleep(5)  # Sleep to prevent rapid logging
+            return  # Skip processing if the agent is not running
 
         # Create LLMQueue entry
         LLMQueue.objects.create(agent=agent, prompt=final_llm_prompt)
@@ -296,9 +319,11 @@ class Command(BaseCommand):
 
         # Set agent phase to thinking
         agent.phase = "thinking"
-        agent.is_running = False # Pause the agent after creating an LLM request
+        agent.is_running = False  # Pause the agent after creating an LLM request
         agent.save()
-        logger.debug(f"Agent '{agent.name}' phase changed to 'thinking' and is_running set to False.")
+        logger.debug(
+            f"Agent '{agent.name}' phase changed to 'thinking' and is_running set to False."
+        )
 
         # Check if the agent is waiting
         if "waiting" in agent.flags and agent.flags["waiting"]:

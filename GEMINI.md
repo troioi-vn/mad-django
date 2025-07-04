@@ -8,7 +8,7 @@ This document summarizes the features and implementation details of the `mad-dja
 *   **Django App Creation**: A Django app named `mad_multi_agent_dungeon` was created and registered in `INSTALLED_APPS`.
 *   **Git Repository Setup**: A Git repository was initialized, and user name/email were configured.
 *   **`Agent` Model**:
-    *   Created with fields: `name` (unique ID), `look` (short description), `description` (text), `flags` (JSONField, optional), `inventory` (JSONField, optional), `tokens` (integer), `level` (integer), `location` (string for `room_id`), `last_command_sent` (DateTimeField, optional), `last_retrieved` (DateTimeField, optional), `prompt` (TextField, optional), `perception` (TextField, optional), and `memoriesLoaded` (JSONField, optional, storing a list of memory IDs).
+    *   Created with fields: `name` (unique ID), `look` (short description), `description` (text), `flags` (JSONField, optional), `inventory` (JSONField, optional), `tokens` (integer), `level` (integer), `location` (string for `room_id`), `last_command_sent` (DateTimeField, optional), `last_retrieved` (DateTimeField, optional), `prompt` (TextField, optional), `perception` (TextField, optional), `perception_limit` (integer, default 5000), and `memoriesLoaded` (JSONField, optional, storing a list of memory IDs).
     *   Includes `__str__` method for readable representation.
     *   Includes an `is_active` method that returns `True` if the agent's `last_command_sent` was less than 5 minutes ago, otherwise `False`.
 *   **`CommandQueue` Model**:
@@ -86,7 +86,7 @@ This document summarizes the features and implementation details of the `mad-dja
         *   If no completed LLM response is found, and there are no `pending` or `thinking` LLM requests for the agent, the agent will consolidate its prompt (base prompt + loaded memories + perception) and create a new entry in the `LLMQueue`, setting its phase to 'thinking'.
         *   If no completed LLM response is found, but there are `pending` or `thinking` LLM requests, the agent continues to wait in the 'thinking' phase.
     *   If the agent is not in the 'thinking' phase, it processes perceptions from the `PerceptionQueue` by simply appending their text to the agent's `perception` field. It does *not* extract or execute commands from the perception text.
-    *   After processing all perceptions for the current cycle, it constructs a comprehensive prompt for the LLM by concatenating the agent's `prompt` field, the values of all memories whose IDs are in `agent.memoriesLoaded`, and the text of the last processed perception.
+    *   After processing all perceptions for the current cycle, it constructs a comprehensive prompt for the LLM by concatenating the agent's `prompt` field, the values of all memories whose IDs are in `agent.memoriesLoaded`, and the text of the last processed perception. The perception text is truncated to the agent's `perception_limit`.
     *   This combined prompt is then used to create a new entry in the `LLMQueue`, and the agent's `phase` is set to 'thinking'.
     *   Finally, it marks the perception as `delivered`.
 
@@ -124,6 +124,9 @@ This document summarizes the features and implementation details of the `mad-dja
 *   **Reset Agent Functionality**:
     *   The "Reset" button on the agent detail page now clears the agent's `perception` field.
     *   It also marks all `pending` and `thinking` LLM requests for that agent as `failed`.
+*   **Reset Agent Memory Functionality**:
+    *   A "Reset Memory" button has been added to the agent detail page.
+    *   This clears all memories associated with the agent and empties the `memoriesLoaded` list.
 
 ## How to Run
 
@@ -235,12 +238,6 @@ Structure Logs — Use module-based loggers (__name__).
 Readable or Parsable
 
 ### TODO list (concrete tasks):
-- For now, the agent's perception is limited to 5,000 characters. I want to make it configurable.
-    1. Add a perception limit to the agent model.
-    2. Add a "perception limit" field to the first section of the agents page (and also show the used limit), like this: Perception: 5,000 (45% used).
-    3. Update tests and documentation.
-
-- To the agent's page add 'resset memory' button please
 
 
 (Gemini! Before answering, please rephrase the user's request. Keep in mind that he is learning English and would be grateful for pointing out mistakes or rephrase options. Don't be shy about using technical jargon and DevOps vocabulary. Meow!)
